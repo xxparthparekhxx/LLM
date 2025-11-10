@@ -13,7 +13,7 @@ Features:
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import GradScaler, autocast as cuda_autocast
 import os
 import json
 from pathlib import Path
@@ -46,7 +46,7 @@ class Trainer:
         self.is_tpu = device == "tpu"
         
         if self.is_tpu:
-            # Set up TPU environment [web:5][web:8]
+            # Set up TPU environment
             os.environ['PJRT_DEVICE'] = 'TPU'
             import torch_xla.core.xla_model as xm
             import torch_xla.distributed.parallel_loader as pl
@@ -80,16 +80,15 @@ class Trainer:
             eta_min=config.get("min_lr", 1e-6),
         )
 
-        # Mixed precision training [web:7]
+        # Mixed precision training
+        self.use_amp = config.get("use_amp", True)
+        
         if self.is_tpu:
             # TPUs use bfloat16 natively, no need for GradScaler
-            self.use_amp = config.get("use_amp", True)
             self.scaler = None
-            self.amp_dtype = torch.bfloat16
         else:
-            self.use_amp = config.get("use_amp", True) and self.device == "cuda"
+            self.use_amp = self.use_amp and self.device == "cuda"
             self.scaler = GradScaler() if self.use_amp else None
-            self.amp_dtype = torch.float16
 
         # Training state
         self.current_epoch = 0
@@ -123,7 +122,7 @@ class Trainer:
         total_loss = 0.0
         num_batches = 0
 
-        # Wrap dataloader for TPU [web:10]
+        # Wrap dataloader for TPU
         if self.is_tpu:
             train_loader = self.pl.ParallelLoader(
                 self.train_loader, [self.device]
@@ -140,14 +139,12 @@ class Trainer:
             # Forward pass with mixed precision
             if self.use_amp:
                 if self.is_tpu:
-                    # TPU: use bfloat16 autocast [web:7]
-                    with autocast(device_type='cuda', dtype=self.amp_dtype, enabled=False):
-                        # Manual casting for TPU
-                        x_cast = x.to(self.amp_dtype) if x.dtype == torch.float32 else x
-                        logits, loss = self.model(x_cast, y)
+                    # TPU: use XLA autocast with bfloat16
+                    with torch.autocast(device_type='xla', dtype=torch.bfloat16):
+                        logits, loss = self.model(x, y)
                 else:
                     # CUDA: use standard autocast
-                    with autocast():
+                    with cuda_autocast():
                         logits, loss = self.model(x, y)
                         
                 loss = loss / self.config.get("gradient_accumulation_steps", 1)
@@ -161,7 +158,7 @@ class Trainer:
             else:
                 loss.backward()
 
-            # Gradient accumulation [web:11]
+            # Gradient accumulation
             if (batch_idx + 1) % self.config.get("gradient_accumulation_steps", 1) == 0:
                 # Gradient clipping
                 if self.use_amp and not self.is_tpu:
@@ -176,20 +173,20 @@ class Trainer:
                         self.model.parameters(), self.config.get("max_grad_norm", 1.0)
                     )
                     if self.is_tpu:
-                        # Use XLA optimizer step [web:10]
+                        # Use XLA optimizer step
                         self.xm.optimizer_step(self.optimizer)
                     else:
                         self.optimizer.step()
 
                 self.optimizer.zero_grad()
                 
-                # Mark step for TPU to execute graph [web:11][web:18]
+                # Mark step for TPU to execute graph
                 if self.is_tpu:
                     self.xm.mark_step()
                 
                 self.global_step += 1
             
-            # Mark step after backward for gradient accumulation [web:11]
+            # Mark step after backward for gradient accumulation
             elif self.is_tpu:
                 self.xm.mark_step()
 
@@ -247,11 +244,11 @@ class Trainer:
 
             if self.use_amp:
                 if self.is_tpu:
-                    with autocast(device_type='cuda', dtype=self.amp_dtype, enabled=False):
-                        x_cast = x.to(self.amp_dtype) if x.dtype == torch.float32 else x
-                        _, loss = self.model(x_cast, y)
+                    # TPU: use XLA autocast with bfloat16
+                    with torch.autocast(device_type='xla', dtype=torch.bfloat16):
+                        _, loss = self.model(x, y)
                 else:
-                    with autocast():
+                    with cuda_autocast():
                         _, loss = self.model(x, y)
             else:
                 _, loss = self.model(x, y)
