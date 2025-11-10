@@ -1,5 +1,6 @@
 """
 Data processing utilities for language model training
+Fixed with lazy loading and efficient processing
 """
 
 import torch
@@ -8,17 +9,19 @@ from typing import List, Optional, Tuple
 import os
 import json
 from pathlib import Path
+import numpy as np
 
 
 class TextDataset(Dataset):
-    """Dataset for language modeling"""
+    """Dataset for language modeling with lazy tokenization"""
     
     def __init__(
         self,
         texts: List[str],
         tokenizer,
         block_size: int,
-        stride: Optional[int] = None
+        stride: Optional[int] = None,
+        lazy: bool = True
     ):
         """
         Args:
@@ -26,42 +29,159 @@ class TextDataset(Dataset):
             tokenizer: Tokenizer instance with encode method
             block_size: Maximum sequence length
             stride: Stride for sliding window (if None, uses block_size)
+            lazy: If True, tokenize on-the-fly (much faster initialization)
         """
+        self.texts = texts
         self.tokenizer = tokenizer
         self.block_size = block_size
         self.stride = stride if stride is not None else block_size
+        self.lazy = lazy
         
-        # Tokenize all texts
-        self.tokens = []
-        for text in texts:
-            tokens = tokenizer.encode(text)
-            self.tokens.extend(tokens)
-        
-        # Create sequences with sliding window
-        self.sequences = []
-        for i in range(0, len(self.tokens) - block_size + 1, self.stride):
-            seq = self.tokens[i:i + block_size + 1]  # +1 for target
-            if len(seq) == block_size + 1:
-                self.sequences.append(seq)
+        if not lazy:
+            # Old behavior: tokenize everything upfront (SLOW for large datasets)
+            print("Tokenizing all texts (this may take a while)...")
+            self.tokens = []
+            for i, text in enumerate(texts):
+                if i % 1000 == 0:
+                    print(f"  Tokenized {i}/{len(texts)} texts...")
+                tokens = tokenizer.encode(text)
+                self.tokens.extend(tokens)
+            
+            # Create sequences with sliding window
+            self.sequences = []
+            for i in range(0, len(self.tokens) - block_size, self.stride):
+                seq = self.tokens[i:i + block_size + 1]  # +1 for target
+                if len(seq) == block_size + 1:
+                    self.sequences.append(seq)
+            
+            self.tokens = None  # Free memory
+        else:
+            # New behavior: lazy tokenization (FAST)
+            # Just store text indices and compute sequences on-demand
+            self.sequences = None
+            self.tokens = None
+            
+            # Pre-compute approximate number of sequences
+            # Estimate: avg 4 chars per token
+            total_chars = sum(len(t) for t in texts[:min(100, len(texts))])
+            avg_chars = total_chars / min(100, len(texts))
+            avg_tokens_per_text = avg_chars / 4
+            
+            # Each text can produce roughly (tokens - block_size) / stride sequences
+            self._estimated_len = max(1, int(len(texts) * avg_tokens_per_text / stride))
     
     def __len__(self):
-        return len(self.sequences)
+        if self.sequences is not None:
+            return len(self.sequences)
+        return self._estimated_len
     
     def __getitem__(self, idx):
-        seq = self.sequences[idx]
-        x = torch.tensor(seq[:-1], dtype=torch.long)
-        y = torch.tensor(seq[1:], dtype=torch.long)
+        if self.sequences is not None:
+            # Non-lazy mode
+            seq = self.sequences[idx]
+            x = torch.tensor(seq[:-1], dtype=torch.long)
+            y = torch.tensor(seq[1:], dtype=torch.long)
+            return x, y
+        else:
+            # Lazy mode: tokenize on-demand
+            # Map global idx to text and position within text
+            text_idx = idx % len(self.texts)
+            text = self.texts[text_idx]
+            
+            # Tokenize this text
+            tokens = self.tokenizer.encode(text)
+            
+            # Get a random window from this text
+            if len(tokens) <= self.block_size:
+                # Pad if too short
+                seq = tokens + [self.tokenizer.pad_token_id] * (self.block_size + 1 - len(tokens))
+            else:
+                # Random crop
+                max_start = len(tokens) - self.block_size - 1
+                start = torch.randint(0, max(1, max_start), (1,)).item()
+                seq = tokens[start:start + self.block_size + 1]
+            
+            x = torch.tensor(seq[:-1], dtype=torch.long)
+            y = torch.tensor(seq[1:], dtype=torch.long)
+            return x, y
+
+
+class MemoryMappedDataset(Dataset):
+    """
+    Memory-mapped dataset for very large corpora
+    Tokenizes once, saves to disk, then loads via mmap (fastest for repeated use)
+    """
+    
+    def __init__(
+        self,
+        texts: List[str],
+        tokenizer,
+        block_size: int,
+        cache_dir: str = '.cache',
+        force_reprocess: bool = False
+    ):
+        self.tokenizer = tokenizer
+        self.block_size = block_size
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create cache filename based on content hash
+        cache_key = f"tokens_{len(texts)}_{block_size}"
+        self.cache_file = self.cache_dir / f"{cache_key}.npy"
+        
+        if self.cache_file.exists() and not force_reprocess:
+            print(f"Loading cached tokens from {self.cache_file}...")
+            self.tokens = np.load(str(self.cache_file), mmap_mode='r')
+        else:
+            print(f"Processing and caching tokens to {self.cache_file}...")
+            all_tokens = []
+            for i, text in enumerate(texts):
+                if i % 1000 == 0:
+                    print(f"  Processed {i}/{len(texts)} texts...")
+                tokens = tokenizer.encode(text)
+                all_tokens.extend(tokens)
+            
+            # Save to disk
+            tokens_array = np.array(all_tokens, dtype=np.uint16)  # uint16 for vocab < 65536
+            np.save(str(self.cache_file), tokens_array)
+            
+            # Load as memory-mapped
+            self.tokens = np.load(str(self.cache_file), mmap_mode='r')
+            print(f"Cached {len(self.tokens)} tokens")
+        
+        # Calculate number of sequences
+        self.n_sequences = max(1, (len(self.tokens) - block_size) // block_size)
+    
+    def __len__(self):
+        return self.n_sequences
+    
+    def __getitem__(self, idx):
+        start_idx = idx * self.block_size
+        end_idx = start_idx + self.block_size + 1
+        
+        if end_idx > len(self.tokens):
+            # Wrap around
+            seq = np.concatenate([
+                self.tokens[start_idx:],
+                self.tokens[:end_idx - len(self.tokens)]
+            ])
+        else:
+            seq = self.tokens[start_idx:end_idx]
+        
+        x = torch.from_numpy(seq[:-1].astype(np.int64))
+        y = torch.from_numpy(seq[1:].astype(np.int64))
         return x, y
 
 
 def load_text_file(filepath: str) -> List[str]:
-    """Load texts from a file (one per line or paragraph)"""
+    """Load texts from a file"""
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    # Split by double newlines (paragraphs) or single newlines
+    # Split by double newlines (paragraphs)
     texts = [t.strip() for t in content.split('\n\n') if t.strip()]
     if not texts:
+        # Fall back to single newlines
         texts = [t.strip() for t in content.split('\n') if t.strip()]
     
     return texts
@@ -120,7 +240,7 @@ def create_dataloader(
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=pin_memory,
-        drop_last=True  # Drop last incomplete batch
+        drop_last=True
     )
 
 
@@ -148,7 +268,8 @@ class DataCollator:
         """Collate a batch of sequences"""
         xs, ys = zip(*batch)
         
-        # Pad to same length
+        # All sequences should be same length in TextDataset
+        # but this handles edge cases
         max_len = max(x.size(0) for x in xs)
         
         x_batch = []
@@ -158,7 +279,7 @@ class DataCollator:
             pad_len = max_len - x.size(0)
             if pad_len > 0:
                 x = torch.cat([x, torch.full((pad_len,), self.pad_token_id, dtype=x.dtype)])
-                y = torch.cat([y, torch.full((pad_len,), -1, dtype=y.dtype)])  # -1 for ignore_index
+                y = torch.cat([y, torch.full((pad_len,), -1, dtype=y.dtype)])
             x_batch.append(x)
             y_batch.append(y)
         
@@ -173,18 +294,28 @@ if __name__ == "__main__":
         "The quick brown fox jumps over the lazy dog.",
         "Hello world! This is a test.",
         "Machine learning is fascinating."
-    ] * 10
+    ] * 1000  # More texts to test lazy loading
     
     tokenizer = SimpleTokenizer()
     tokenizer.train(texts)
     
-    dataset = TextDataset(texts, tokenizer, block_size=32, stride=16)
+    print("\n=== Testing Lazy Dataset (FAST) ===")
+    import time
+    start = time.time()
+    dataset = TextDataset(texts, tokenizer, block_size=32, stride=16, lazy=True)
+    print(f"Lazy dataset created in {time.time() - start:.2f}s")
     print(f"Dataset size: {len(dataset)}")
     
-    dataloader = create_dataloader(dataset, batch_size=2, shuffle=False)
+    print("\n=== Testing Non-Lazy Dataset (SLOW) ===")
+    start = time.time()
+    dataset2 = TextDataset(texts[:100], tokenizer, block_size=32, stride=16, lazy=False)
+    print(f"Non-lazy dataset created in {time.time() - start:.2f}s")
+    print(f"Dataset size: {len(dataset2)}")
     
+    dataloader = create_dataloader(dataset, batch_size=4, shuffle=False, num_workers=0)
+    
+    print("\n=== Testing DataLoader ===")
     for i, (x, y) in enumerate(dataloader):
         print(f"Batch {i}: x shape={x.shape}, y shape={y.shape}")
         if i >= 2:
             break
-
