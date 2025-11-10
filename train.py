@@ -316,7 +316,7 @@ def main():
         # Default config
         config = {
             'model': {
-                'vocab_size': 10000,
+                # 'vocab_size': 10000,
                 'context_length': 512,
                 'n_layers': 6,
                 'n_heads': 8,
