@@ -2,11 +2,12 @@
 Advanced training pipeline for language model
 Features:
 - Gradient accumulation
-- Mixed precision training
+- Mixed precision training (CUDA AMP / TPU bfloat16)
 - Learning rate scheduling
 - Checkpointing
 - Wandb integration (optional)
 - Early stopping
+- TPU support via PyTorch/XLA
 """
 
 import torch
@@ -27,7 +28,7 @@ from tokenizer import SimpleTokenizer, BPETokenizer
 
 
 class Trainer:
-    """Advanced trainer for language model"""
+    """Advanced trainer for language model with TPU support"""
 
     def __init__(
         self,
@@ -38,12 +39,30 @@ class Trainer:
         device: str = "cuda",
         use_wandb: bool = False,
     ):
-        self.model = model.to(device)
+        self.config = config
+        self.use_wandb = use_wandb
+        
+        # Detect if using TPU
+        self.is_tpu = device == "tpu"
+        
+        if self.is_tpu:
+            # Set up TPU environment [web:5][web:8]
+            os.environ['PJRT_DEVICE'] = 'TPU'
+            import torch_xla.core.xla_model as xm
+            import torch_xla.distributed.parallel_loader as pl
+            
+            self.xm = xm
+            self.pl = pl
+            self.device = xm.xla_device()
+            print(f"Using TPU device: {self.device}")
+        else:
+            self.xm = None
+            self.pl = None
+            self.device = device if torch.cuda.is_available() and device == "cuda" else "cpu"
+        
+        self.model = model.to(self.device)
         self.train_loader = train_loader
         self.val_loader = val_loader
-        self.config = config
-        self.device = device
-        self.use_wandb = use_wandb
 
         # Optimizer
         self.optimizer = torch.optim.AdamW(
@@ -61,9 +80,16 @@ class Trainer:
             eta_min=config.get("min_lr", 1e-6),
         )
 
-        # Mixed precision training
-        self.use_amp = config.get("use_amp", True) and device == "cuda"
-        self.scaler = GradScaler() if self.use_amp else None
+        # Mixed precision training [web:7]
+        if self.is_tpu:
+            # TPUs use bfloat16 natively, no need for GradScaler
+            self.use_amp = config.get("use_amp", True)
+            self.scaler = None
+            self.amp_dtype = torch.bfloat16
+        else:
+            self.use_amp = config.get("use_amp", True) and self.device == "cuda"
+            self.scaler = GradScaler() if self.use_amp else None
+            self.amp_dtype = torch.float16
 
         # Training state
         self.current_epoch = 0
@@ -97,30 +123,48 @@ class Trainer:
         total_loss = 0.0
         num_batches = 0
 
-        pbar = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch + 1}")
+        # Wrap dataloader for TPU [web:10]
+        if self.is_tpu:
+            train_loader = self.pl.ParallelLoader(
+                self.train_loader, [self.device]
+            ).per_device_loader(self.device)
+        else:
+            train_loader = self.train_loader
+
+        pbar = tqdm(train_loader, desc=f"Epoch {self.current_epoch + 1}")
 
         for batch_idx, (x, y) in enumerate(pbar):
-            x, y = x.to(self.device), y.to(self.device)
+            if not self.is_tpu:
+                x, y = x.to(self.device), y.to(self.device)
 
-            # Forward pass
+            # Forward pass with mixed precision
             if self.use_amp:
-                with autocast():
-                    logits, loss = self.model(x, y)
-                    loss = loss / self.config.get("gradient_accumulation_steps", 1)
+                if self.is_tpu:
+                    # TPU: use bfloat16 autocast [web:7]
+                    with autocast(device_type='cuda', dtype=self.amp_dtype, enabled=False):
+                        # Manual casting for TPU
+                        x_cast = x.to(self.amp_dtype) if x.dtype == torch.float32 else x
+                        logits, loss = self.model(x_cast, y)
+                else:
+                    # CUDA: use standard autocast
+                    with autocast():
+                        logits, loss = self.model(x, y)
+                        
+                loss = loss / self.config.get("gradient_accumulation_steps", 1)
             else:
                 logits, loss = self.model(x, y)
                 loss = loss / self.config.get("gradient_accumulation_steps", 1)
 
             # Backward pass
-            if self.use_amp:
+            if self.use_amp and not self.is_tpu:
                 self.scaler.scale(loss).backward()
             else:
                 loss.backward()
 
-            # Gradient accumulation
+            # Gradient accumulation [web:11]
             if (batch_idx + 1) % self.config.get("gradient_accumulation_steps", 1) == 0:
                 # Gradient clipping
-                if self.use_amp:
+                if self.use_amp and not self.is_tpu:
                     self.scaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(
                         self.model.parameters(), self.config.get("max_grad_norm", 1.0)
@@ -131,10 +175,23 @@ class Trainer:
                     torch.nn.utils.clip_grad_norm_(
                         self.model.parameters(), self.config.get("max_grad_norm", 1.0)
                     )
-                    self.optimizer.step()
+                    if self.is_tpu:
+                        # Use XLA optimizer step [web:10]
+                        self.xm.optimizer_step(self.optimizer)
+                    else:
+                        self.optimizer.step()
 
                 self.optimizer.zero_grad()
+                
+                # Mark step for TPU to execute graph [web:11][web:18]
+                if self.is_tpu:
+                    self.xm.mark_step()
+                
                 self.global_step += 1
+            
+            # Mark step after backward for gradient accumulation [web:11]
+            elif self.is_tpu:
+                self.xm.mark_step()
 
             total_loss += loss.item() * self.config.get(
                 "gradient_accumulation_steps", 1
@@ -174,14 +231,28 @@ class Trainer:
         total_loss = 0.0
         num_batches = 0
 
-        pbar = tqdm(self.val_loader, desc="Validating")
+        # Wrap dataloader for TPU
+        if self.is_tpu:
+            val_loader = self.pl.ParallelLoader(
+                self.val_loader, [self.device]
+            ).per_device_loader(self.device)
+        else:
+            val_loader = self.val_loader
+
+        pbar = tqdm(val_loader, desc="Validating")
 
         for x, y in pbar:
-            x, y = x.to(self.device), y.to(self.device)
+            if not self.is_tpu:
+                x, y = x.to(self.device), y.to(self.device)
 
             if self.use_amp:
-                with autocast():
-                    _, loss = self.model(x, y)
+                if self.is_tpu:
+                    with autocast(device_type='cuda', dtype=self.amp_dtype, enabled=False):
+                        x_cast = x.to(self.amp_dtype) if x.dtype == torch.float32 else x
+                        _, loss = self.model(x_cast, y)
+                else:
+                    with autocast():
+                        _, loss = self.model(x, y)
             else:
                 _, loss = self.model(x, y)
 
@@ -189,6 +260,10 @@ class Trainer:
             num_batches += 1
 
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
+        
+        # Mark step after validation for TPU
+        if self.is_tpu:
+            self.xm.mark_step()
 
         avg_loss = total_loss / num_batches
         return avg_loss
@@ -208,19 +283,34 @@ class Trainer:
         if self.scaler is not None:
             checkpoint["scaler_state_dict"] = self.scaler.state_dict()
 
-        # Save latest checkpoint
-        torch.save(checkpoint, self.checkpoint_dir / "latest.pt")
+        # Use XLA save for TPU, regular torch.save otherwise
+        if self.is_tpu:
+            # Synchronize before saving on TPU
+            self.xm.mark_step()
+            # For TPU, use xm.save which handles XLA tensors properly
+            self.xm.save(checkpoint, str(self.checkpoint_dir / "latest.pt"))
+            if is_best:
+                self.xm.save(checkpoint, str(self.checkpoint_dir / "best.pt"))
+                print(f"✓ Saved best model (val_loss: {self.best_val_loss:.4f})")
+            if (self.current_epoch + 1) % self.config.get("save_interval", 5) == 0:
+                self.xm.save(
+                    checkpoint, 
+                    str(self.checkpoint_dir / f"epoch_{self.current_epoch + 1}.pt")
+                )
+        else:
+            # Save latest checkpoint
+            torch.save(checkpoint, self.checkpoint_dir / "latest.pt")
 
-        # Save best checkpoint
-        if is_best:
-            torch.save(checkpoint, self.checkpoint_dir / "best.pt")
-            print(f"✓ Saved best model (val_loss: {self.best_val_loss:.4f})")
+            # Save best checkpoint
+            if is_best:
+                torch.save(checkpoint, self.checkpoint_dir / "best.pt")
+                print(f"✓ Saved best model (val_loss: {self.best_val_loss:.4f})")
 
-        # Save periodic checkpoint
-        if (self.current_epoch + 1) % self.config.get("save_interval", 5) == 0:
-            torch.save(
-                checkpoint, self.checkpoint_dir / f"epoch_{self.current_epoch + 1}.pt"
-            )
+            # Save periodic checkpoint
+            if (self.current_epoch + 1) % self.config.get("save_interval", 5) == 0:
+                torch.save(
+                    checkpoint, self.checkpoint_dir / f"epoch_{self.current_epoch + 1}.pt"
+                )
 
     def load_checkpoint(self, checkpoint_path: str):
         """Load model checkpoint"""
@@ -247,11 +337,12 @@ class Trainer:
         print(f"Starting training")
         print(f"{'='*60}")
         print(f"Device: {self.device}")
+        print(f"Device Type: {'TPU' if self.is_tpu else 'GPU/CPU'}")
         print(f"Model parameters: {self.model.get_num_params() / 1e6:.2f}M")
         print(f"Training batches: {len(self.train_loader)}")
         print(f"Validation batches: {len(self.val_loader)}")
         print(f"Max epochs: {max_epochs}")
-        print(f"Mixed precision: {self.use_amp}")
+        print(f"Mixed precision: {self.use_amp} ({'bfloat16' if self.is_tpu else 'float16'})")
         print(f"{'='*60}\n")
 
         start_time = time.time()
@@ -326,7 +417,11 @@ def main():
     parser.add_argument("--config", type=str, help="Path to config JSON file")
     parser.add_argument("--resume", type=str, help="Path to checkpoint to resume from")
     parser.add_argument(
-        "--device", type=str, default="cuda", help="Device to use (cuda/cpu)"
+        "--device", 
+        type=str, 
+        default="cuda", 
+        choices=["cuda", "cpu", "tpu"],
+        help="Device to use (cuda/cpu/tpu)"
     )
     parser.add_argument(
         "--use-wandb", action="store_true", help="Use wandb for logging"
@@ -342,33 +437,41 @@ def main():
         # Default config
         config = {
             "model": {
-                # ~355M parameters (similar to GPT-2 Medium)
-                "context_length": 1024,  # 2x longer context
-                "n_layers": 24,  # Much deeper (was 6)
-                "n_heads": 16,  # More attention heads (was 8)
-                "n_embd": 1024,  # Wider embeddings (was 512)
+                "context_length": 1024,
+                "n_layers": 24,
+                "n_heads": 16,
+                "n_embd": 1024,
                 "dropout": 0.1,
             },
             "training": {
-                "batch_size": 16,  # Larger batches (was 8)
-                "gradient_accumulation_steps": 8,  # More accumulation (was 4)
+                "batch_size": 16,
+                "gradient_accumulation_steps": 8,
                 "max_epochs": 10,
-                "learning_rate": 2e-4,  # Slightly lower for larger model
+                "learning_rate": 2e-4,
                 "weight_decay": 0.1,
                 "max_grad_norm": 1.0,
-                "use_amp": True,  # Keep mixed precision to fit more
+                "use_amp": True,
                 "early_stop_patience": 3,
                 "save_interval": 5,
             },
             "data": {
-                "block_size": 1024,  # Match context_length
-                "stride": 512,  # Half of block_size
+                "block_size": 1024,
+                "stride": 512,
             },
         }
 
-    device = (
-        args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu"
-    )
+    device = args.device
+
+    # Validate TPU availability
+    if device == "tpu":
+        try:
+            import torch_xla
+            import torch_xla.core.xla_model as xm
+            print("✓ TPU libraries available")
+        except ImportError:
+            print("Error: TPU requested but torch_xla not installed")
+            print("Install with: pip install torch_xla")
+            return
 
     # Load data
     print("Loading data...")
@@ -401,20 +504,23 @@ def main():
     print(f"Val samples: {len(val_dataset)}")
 
     # Create data loaders
+    # For TPU, reduce num_workers to avoid issues
+    num_workers = 0 if device == "tpu" else 0
+    
     train_loader = create_dataloader(
         train_dataset,
         batch_size=config["training"]["batch_size"],
         shuffle=True,
-        num_workers=0,
-        pin_memory=True,
+        num_workers=num_workers,
+        pin_memory=(device == "cuda"),
     )
 
     val_loader = create_dataloader(
         val_dataset,
         batch_size=config["training"]["batch_size"],
         shuffle=False,
-        num_workers=0,
-        pin_memory=True,
+        num_workers=num_workers,
+        pin_memory=(device == "cuda"),
     )
 
     # Create model
