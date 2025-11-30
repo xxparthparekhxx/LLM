@@ -148,19 +148,32 @@ class Trainer:
             train_loader = self.train_loader
 
         total_batches = len(train_loader)
+        
+        # Skip to current batch if resuming
+        if self.current_batch > 0:
+            print(f"\nResuming from batch {self.current_batch}/{total_batches}")
+            # Create iterator and skip ahead
+            train_iter = iter(train_loader)
+            for _ in range(self.current_batch):
+                try:
+                    next(train_iter)
+                except StopIteration:
+                    break
+            # Convert back to iterable for tqdm
+            remaining_data = list(train_iter)
+            train_loader = remaining_data
+            start_batch = self.current_batch
+        else:
+            start_batch = 0
+        
         pbar = tqdm(
             train_loader, 
             desc=f"Epoch {self.current_epoch + 1}",
-            initial=self.current_batch,
+            initial=start_batch,
             total=total_batches
         )
 
-        for batch_idx, (x, y) in enumerate(pbar):
-            # Skip batches if resuming from checkpoint
-            if batch_idx < self.current_batch:
-                continue
-            
-            self.current_batch = batch_idx
+        for batch_idx, (x, y) in enumerate(pbar, start=start_batch):
             if not self.is_tpu:
                 x, y = x.to(self.device), y.to(self.device)
 
