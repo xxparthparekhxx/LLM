@@ -37,15 +37,15 @@ def download_pretraining_data(dataset_name="fineweb", max_samples=None):
         )
         # Reasonable default
         if not max_samples:
-            max_samples = 100000  # ~2-3GB of clean text
-            print(f"Using {max_samples:,} documents")
+            max_samples = None  # ~1.2GB of clean text
+            # print(f"Using {max_samples:,} documents")
         
     elif dataset_name == "tinystories":
         print("Loading TinyStories (clean, simple stories)...")
         print("Perfect for quick testing - generates coherent text!")
         dataset = load_dataset("roneneldan/TinyStories", split="train")
         if not max_samples:
-            max_samples = 50000  # Quick subset
+            max_samples =None  # Quick subset
             
     elif dataset_name == "c4":
         print("Loading C4 (cleaned Common Crawl)...")

@@ -21,6 +21,8 @@ from tqdm import tqdm
 from typing import Optional, Dict, Any
 import time
 from datetime import datetime
+import signal
+import sys
 
 from model import LanguageModel, ModelConfig
 from data_utils import TextDataset, create_dataloader, split_dataset
@@ -92,13 +94,19 @@ class Trainer:
 
         # Training state
         self.current_epoch = 0
+        self.current_batch = 0  # Track batch within epoch
         self.global_step = 0
         self.best_val_loss = float("inf")
         self.patience_counter = 0
+        self.last_checkpoint_time = time.time()  # For hourly checkpoints
+        self.interrupted = False  # For Ctrl+C handling
 
         # Checkpoint directory
         self.checkpoint_dir = Path(config.get("checkpoint_dir", "checkpoints"))
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Setup signal handler for Ctrl+C
+        signal.signal(signal.SIGINT, self._signal_handler)
 
         # Initialize wandb if requested
         if self.use_wandb:
@@ -115,6 +123,15 @@ class Trainer:
             except ImportError:
                 print("Warning: wandb not installed, continuing without it")
                 self.use_wandb = False
+    
+    def _signal_handler(self, signum, frame):
+        """Handle Ctrl+C gracefully by saving checkpoint"""
+        print("\n\n⚠️  Keyboard interrupt detected!")
+        print("Saving checkpoint before exit...")
+        self.interrupted = True
+        self.save_checkpoint(is_best=False, reason="interrupt")
+        print("✓ Checkpoint saved! You can resume training later.")
+        sys.exit(0)
 
     def train_epoch(self) -> float:
         """Train for one epoch"""
@@ -130,9 +147,20 @@ class Trainer:
         else:
             train_loader = self.train_loader
 
-        pbar = tqdm(train_loader, desc=f"Epoch {self.current_epoch + 1}")
+        total_batches = len(train_loader)
+        pbar = tqdm(
+            train_loader, 
+            desc=f"Epoch {self.current_epoch + 1}",
+            initial=self.current_batch,
+            total=total_batches
+        )
 
         for batch_idx, (x, y) in enumerate(pbar):
+            # Skip batches if resuming from checkpoint
+            if batch_idx < self.current_batch:
+                continue
+            
+            self.current_batch = batch_idx
             if not self.is_tpu:
                 x, y = x.to(self.device), y.to(self.device)
 
@@ -216,9 +244,19 @@ class Trainer:
                         * self.config.get("gradient_accumulation_steps", 1),
                         "train/learning_rate": self.scheduler.get_last_lr()[0],
                         "train/step": self.global_step,
+                        "train/epoch_progress": f"{batch_idx}/{total_batches}",
                     }
                 )
+            
+            # Hourly checkpoint saving (for Colab)
+            current_time = time.time()
+            if current_time - self.last_checkpoint_time >= 3600:  # 1 hour
+                print(f"\n⏰ Hourly checkpoint at batch {batch_idx}/{total_batches}")
+                self.save_checkpoint(is_best=False, reason="hourly")
+                self.last_checkpoint_time = current_time
 
+        # Reset batch counter at end of epoch
+        self.current_batch = 0
         return total_loss / num_batches
 
     @torch.no_grad()
@@ -265,16 +303,20 @@ class Trainer:
         avg_loss = total_loss / num_batches
         return avg_loss
 
-    def save_checkpoint(self, is_best: bool = False):
-        """Save model checkpoint"""
+    def save_checkpoint(self, is_best: bool = False, reason: str = "periodic"):
+        """Save model checkpoint with full training state"""
         checkpoint = {
             "epoch": self.current_epoch,
+            "batch": self.current_batch,  # Save batch progress
             "global_step": self.global_step,
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scheduler_state_dict": self.scheduler.state_dict(),
             "best_val_loss": self.best_val_loss,
+            "patience_counter": self.patience_counter,
             "config": self.config,
+            "timestamp": datetime.now().isoformat(),
+            "reason": reason,  # Why was this checkpoint saved
         }
 
         if self.scaler is not None:
@@ -302,28 +344,45 @@ class Trainer:
             if is_best:
                 torch.save(checkpoint, self.checkpoint_dir / "best.pt")
                 print(f"✓ Saved best model (val_loss: {self.best_val_loss:.4f})")
+            
+            # Save reason-specific checkpoints
+            if reason == "hourly":
+                checkpoint_name = f"hourly_epoch{self.current_epoch}_batch{self.current_batch}.pt"
+                torch.save(checkpoint, self.checkpoint_dir / checkpoint_name)
+                print(f"✓ Hourly checkpoint saved: {checkpoint_name}")
+            elif reason == "interrupt":
+                checkpoint_name = "interrupt_recovery.pt"
+                torch.save(checkpoint, self.checkpoint_dir / checkpoint_name)
+                print(f"✓ Interrupt recovery checkpoint saved")
 
-            # Save periodic checkpoint
-            if (self.current_epoch + 1) % self.config.get("save_interval", 5) == 0:
+            # Save periodic epoch checkpoint
+            if (self.current_epoch + 1) % self.config.get("save_interval", 1) == 0 and reason == "periodic":
                 torch.save(
                     checkpoint, self.checkpoint_dir / f"epoch_{self.current_epoch + 1}.pt"
                 )
 
     def load_checkpoint(self, checkpoint_path: str):
-        """Load model checkpoint"""
+        """Load model checkpoint with full training state"""
+        print(f"Loading checkpoint from: {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
 
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         self.current_epoch = checkpoint["epoch"]
+        self.current_batch = checkpoint.get("batch", 0)  # Resume from exact batch
         self.global_step = checkpoint["global_step"]
         self.best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+        self.patience_counter = checkpoint.get("patience_counter", 0)
 
         if self.scaler is not None and "scaler_state_dict" in checkpoint:
             self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
-
-        print(f"Loaded checkpoint from epoch {self.current_epoch}")
+        
+        reason = checkpoint.get("reason", "unknown")
+        timestamp = checkpoint.get("timestamp", "unknown")
+        print(f"✓ Loaded checkpoint from epoch {self.current_epoch}, batch {self.current_batch}")
+        print(f"  Checkpoint reason: {reason}, saved at: {timestamp}")
+        print(f"  Best val loss: {self.best_val_loss:.4f}, Global step: {self.global_step}")
 
     def train(self):
         """Main training loop"""
@@ -385,11 +444,17 @@ class Trainer:
                 )
 
             # Save checkpoint
-            self.save_checkpoint(is_best=is_best)
+            self.save_checkpoint(is_best=is_best, reason="epoch_end")
 
             # Early stopping
             if early_stop_patience and self.patience_counter >= early_stop_patience:
                 print(f"\nEarly stopping triggered after {epoch + 1} epochs")
+                self.save_checkpoint(is_best=False, reason="early_stop")
+                break
+            
+            # Check if interrupted
+            if self.interrupted:
+                print("\nTraining interrupted by user")
                 break
 
         elapsed_time = time.time() - start_time
@@ -431,31 +496,32 @@ def main():
         with open(args.config, "r") as f:
             config = json.load(f)
     else:
-        # Default config
+        # Optimized config for 15GB VRAM (batch_size=1 + gradient checkpointing)
+        # Target: ~800M parameters for maximum capacity
         config = {
             "model": {
-                "context_length": 1024,
-                "n_layers": 24,
-                "n_heads": 16,
-                "n_kv_heads": 16,  # GQA: set to n_heads for standard MHA, or lower for GQA
-                "n_embd": 1024,
+                "context_length": 2048,  # Longer context for better understanding
+                "n_layers": 24,  # Deep model
+                "n_heads": 16,  # Standard head count
+                "n_kv_heads": 4,  # GQA 4x for efficient inference & smaller KV cache
+                "n_embd": 1536,  # Large embedding dimension (~800M params total)
                 "dropout": 0.1,
-                "use_gradient_checkpointing": True,  # Enable for memory-efficient training
+                "use_gradient_checkpointing": True,  # CRITICAL for 15GB VRAM
             },
             "training": {
-                "batch_size": 16,
-                "gradient_accumulation_steps": 8,
+                "batch_size": 1,  # Minimum for 15GB VRAM with large model
+                "gradient_accumulation_steps": 32,  # Effective batch = 32
                 "max_epochs": 10,
-                "learning_rate": 2e-4,
+                "learning_rate": 6e-4,  # Higher LR for larger models
                 "weight_decay": 0.1,
                 "max_grad_norm": 1.0,
-                "use_amp": True,
+                "use_amp": True,  # Mixed precision (BF16/FP16) essential
                 "early_stop_patience": 3,
-                "save_interval": 5,
+                "save_interval": 1,  # Save every epoch with large model
             },
             "data": {
-                "block_size": 1024,
-                "stride": 512,
+                "block_size": 2048,  # Match context_length
+                "stride": 1024,  # 50% overlap for better learning
             },
         }
 
