@@ -159,9 +159,8 @@ class Trainer:
                     next(train_iter)
                 except StopIteration:
                     break
-            # Convert back to iterable for tqdm
-            remaining_data = list(train_iter)
-            train_loader = remaining_data
+            # Use iterator directly (don't convert to list to save RAM)
+            train_loader = train_iter
             start_batch = self.current_batch
         else:
             start_batch = 0
