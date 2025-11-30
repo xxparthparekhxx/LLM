@@ -703,10 +703,24 @@ class LanguageModel(nn.Module):
             {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
         ]
         
-        # Use fused AdamW if on CUDA
-        use_fused = (device_type == 'cuda') and ('fused' in torch.optim.AdamW.__init__.__code__.co_varnames)
-        extra_args = dict(fused=True) if use_fused else dict()
-        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
+        # Try to use 8-bit optimizer for memory savings
+        use_8bit = False
+        try:
+            import bitsandbytes as bnb
+            use_8bit = True
+            print("✓ Using 8-bit AdamW optimizer (saves ~3-4GB memory)")
+        except ImportError:
+            print("ℹ️  bitsandbytes not found, using standard AdamW")
+            print("   Install with: pip install bitsandbytes")
+        
+        if use_8bit:
+            # Use 8-bit optimizer - 50% memory savings on optimizer states
+            optimizer = bnb.optim.AdamW8bit(optim_groups, lr=learning_rate, betas=betas)
+        else:
+            # Standard AdamW with optional fused kernel
+            use_fused = (device_type == 'cuda') and ('fused' in torch.optim.AdamW.__init__.__code__.co_varnames)
+            extra_args = dict(fused=True) if use_fused else dict()
+            optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
         
         return optimizer
 
