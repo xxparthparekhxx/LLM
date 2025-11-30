@@ -351,9 +351,13 @@ class Trainer:
                 torch.save(checkpoint, self.checkpoint_dir / checkpoint_name)
                 print(f"✓ Hourly checkpoint saved: {checkpoint_name}")
             elif reason == "interrupt":
-                checkpoint_name = "interrupt_recovery.pt"
+                checkpoint_name = f"interrupt_epoch{self.current_epoch}_batch{self.current_batch}.pt"
                 torch.save(checkpoint, self.checkpoint_dir / checkpoint_name)
-                print(f"✓ Interrupt recovery checkpoint saved")
+                print(f"✓ Interrupt checkpoint saved: {checkpoint_name}")
+            elif reason == "early_stop":
+                checkpoint_name = f"early_stop_epoch{self.current_epoch}.pt"
+                torch.save(checkpoint, self.checkpoint_dir / checkpoint_name)
+                print(f"✓ Early stop checkpoint saved: {checkpoint_name}")
 
             # Save periodic epoch checkpoint
             if (self.current_epoch + 1) % self.config.get("save_interval", 1) == 0 and reason == "periodic":
