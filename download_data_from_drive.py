@@ -1,37 +1,61 @@
 """
-Simple script to download data folder from Google Drive
-Usage: python download_data_from_drive.py --gdrive-id YOUR_FOLDER_ID
+Simple script to copy data from mounted Google Drive
+Usage: Mount Drive in Colab, then run this script
 """
 
-import argparse
-import subprocess
+import shutil
+from pathlib import Path
 import sys
-import os
 
-def download_from_drive(gdrive_id: str, output_path: str = "data"):
-    """Download folder/file from Google Drive"""
+def copy_from_drive(source_path: str, dest_path: str = "data"):
+    """Copy data folder from mounted Google Drive"""
     
-    # Install gdown if not available
-    try:
-        import gdown
-    except ImportError:
-        print("Installing gdown...")
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "gdown"], check=True)
-        import gdown
+    source = Path(source_path)
+    dest = Path(dest_path)
     
-    print(f"Downloading from Google Drive (ID: {gdrive_id})...")
-    print(f"Output: {output_path}")
+    if not source.exists():
+        print(f"❌ Source not found: {source}")
+        print("\nMake sure:")
+        print("1. You've mounted Google Drive in Colab")
+        print("2. The path is correct")
+        print("\nExample paths:")
+        print("  /content/drive/MyDrive/LLM_Data/data")
+        print("  /content/drive/MyDrive/fineweb")
+        return False
     
-    # Download folder
-    url = f"https://drive.google.com/drive/folders/{gdrive_id}"
-    gdown.download_folder(url, output=output_path, quiet=False, use_cookies=False)
+    print(f"Copying from: {source}")
+    print(f"Copying to: {dest}")
     
-    print(f"\n✓ Download complete: {output_path}")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Copy entire directory
+    if source.is_dir():
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(source, dest)
+        print(f"\n✓ Copied directory successfully!")
+    else:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, dest)
+        print(f"\n✓ Copied file successfully!")
+    
+    # Show size
+    if dest.is_dir():
+        total_size = sum(f.stat().st_size for f in dest.rglob('*') if f.is_file())
+        print(f"Total size: {total_size / 1e9:.2f} GB")
+    else:
+        print(f"File size: {dest.stat().st_size / 1e9:.2f} GB")
+    
+    return True
 
 if __name__ == "__main__":
+    import argparse
+    
     parser = argparse.ArgumentParser()
-    parser.add_argument("--gdrive-id", required=True, help="Google Drive folder ID")
-    parser.add_argument("--output", default="data", help="Output folder (default: data)")
+    parser.add_argument("--source", required=True, help="Path in Google Drive (e.g., /content/drive/MyDrive/LLM_Data/data)")
+    parser.add_argument("--dest", default="data", help="Destination folder (default: data)")
     
     args = parser.parse_args()
-    download_from_drive(args.gdrive_id, args.output)
+    success = copy_from_drive(args.source, args.dest)
+    sys.exit(0 if success else 1)
+
