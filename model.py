@@ -683,8 +683,14 @@ class LanguageModel(nn.Module):
                 elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
                     no_decay.add(fpn)
         
-        # Validate all parameters are accounted for
+        # Get actual parameter dict (handles weight tying)
         param_dict = {pn: p for pn, p in self.named_parameters()}
+        
+        # Filter out parameters that don't actually exist (due to weight tying)
+        decay = decay & param_dict.keys()
+        no_decay = no_decay & param_dict.keys()
+        
+        # Validate all parameters are accounted for
         inter_params = decay & no_decay
         union_params = decay | no_decay
         assert len(inter_params) == 0, f"Parameters in both decay and no_decay: {inter_params}"
