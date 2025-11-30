@@ -496,32 +496,32 @@ def main():
         with open(args.config, "r") as f:
             config = json.load(f)
     else:
-        # Optimized config for 15GB VRAM (batch_size=1 + gradient checkpointing)
-        # Target: ~800M parameters for maximum capacity
+        # Optimized config for Colab T4 GPU (15GB VRAM)
+        # Target: ~570M parameters for safe training
         config = {
             "model": {
-                "context_length": 2048,  # Longer context for better understanding
-                "n_layers": 24,  # Deep model
+                "context_length": 1024,  # Reduced to save memory
+                "n_layers": 24,  # Keep depth
                 "n_heads": 16,  # Standard head count
                 "n_kv_heads": 4,  # GQA 4x for efficient inference & smaller KV cache
-                "n_embd": 1536,  # Large embedding dimension (~800M params total)
+                "n_embd": 1280,  # Reduced from 1536 (~570M params total)
                 "dropout": 0.1,
-                "use_gradient_checkpointing": True,  # CRITICAL for 15GB VRAM
+                "use_gradient_checkpointing": True,  # CRITICAL for memory
             },
             "training": {
-                "batch_size": 1,  # Minimum for 15GB VRAM with large model
-                "gradient_accumulation_steps": 32,  # Effective batch = 32
+                "batch_size": 1,  # Minimum for T4 GPU
+                "gradient_accumulation_steps": 64,  # Increased to maintain effective batch
                 "max_epochs": 10,
                 "learning_rate": 6e-4,  # Higher LR for larger models
                 "weight_decay": 0.1,
                 "max_grad_norm": 1.0,
-                "use_amp": True,  # Mixed precision (BF16/FP16) essential
+                "use_amp": True,  # Mixed precision (FP16) essential
                 "early_stop_patience": 3,
-                "save_interval": 1,  # Save every epoch with large model
+                "save_interval": 1,  # Save every epoch
             },
             "data": {
-                "block_size": 2048,  # Match context_length
-                "stride": 1024,  # 50% overlap for better learning
+                "block_size": 1024,  # Match context_length
+                "stride": 512,  # 50% overlap
             },
         }
 
