@@ -64,13 +64,13 @@ class Trainer:
         self.train_loader = train_loader
         self.val_loader = val_loader
 
-        # Optimizer
-        self.optimizer = torch.optim.AdamW(
-            self.model.parameters(),
-            lr=config.get("learning_rate", 3e-4),
-            betas=config.get("betas", (0.9, 0.95)),
+        # Optimizer - use model's production-ready optimizer configuration
+        device_type = "cuda" if (not self.is_tpu and self.device == "cuda") else "cpu"
+        self.optimizer = self.model.configure_optimizers(
             weight_decay=config.get("weight_decay", 0.1),
-            eps=config.get("eps", 1e-8),
+            learning_rate=config.get("learning_rate", 3e-4),
+            betas=config.get("betas", (0.9, 0.95)),
+            device_type=device_type,
         )
 
         # Learning rate scheduler
@@ -141,15 +141,15 @@ class Trainer:
                 if self.is_tpu:
                     # TPU: use XLA autocast with bfloat16
                     with torch.autocast(device_type='xla', dtype=torch.bfloat16):
-                        logits, loss = self.model(x, y)
+                        logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
                 else:
                     # CUDA: use standard autocast
                     with cuda_autocast():
-                        logits, loss = self.model(x, y)
+                        logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
                         
                 loss = loss / self.config.get("gradient_accumulation_steps", 1)
             else:
-                logits, loss = self.model(x, y)
+                logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
                 loss = loss / self.config.get("gradient_accumulation_steps", 1)
 
             # Backward pass
@@ -246,12 +246,12 @@ class Trainer:
                 if self.is_tpu:
                     # TPU: use XLA autocast with bfloat16
                     with torch.autocast(device_type='xla', dtype=torch.bfloat16):
-                        _, loss = self.model(x, y)
+                        _, loss, _ = self.model(x, y)  # Ignore logits and KV cache
                 else:
                     with cuda_autocast():
-                        _, loss = self.model(x, y)
+                        _, loss, _ = self.model(x, y)  # Ignore logits and KV cache
             else:
-                _, loss = self.model(x, y)
+                _, loss, _ = self.model(x, y)  # Ignore logits and KV cache
 
             total_loss += loss.item()
             num_batches += 1
@@ -437,8 +437,10 @@ def main():
                 "context_length": 1024,
                 "n_layers": 24,
                 "n_heads": 16,
+                "n_kv_heads": 16,  # GQA: set to n_heads for standard MHA, or lower for GQA
                 "n_embd": 1024,
                 "dropout": 0.1,
+                "use_gradient_checkpointing": True,  # Enable for memory-efficient training
             },
             "training": {
                 "batch_size": 16,
