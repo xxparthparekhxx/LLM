@@ -10,13 +10,14 @@ from tqdm import tqdm
 import json
 
 
-def download_pretraining_data(dataset_name="openwebtext", max_samples=None):
+def download_pretraining_data(dataset_name="fineweb", max_samples=None):
     """
     Download pre-training dataset (general text)
     
     Options:
-    - openwebtext: 8.5GB, high quality (RECOMMENDED)
-    - redpajama: Much larger, requires more compute
+    - fineweb: High quality filtered web text (RECOMMENDED)
+    - tinystories: Clean short stories for quick testing
+    - c4: Common Crawl cleaned (larger)
     """
     print(f"\n{'='*60}")
     print(f"Downloading {dataset_name} for pre-training...")
@@ -26,15 +27,40 @@ def download_pretraining_data(dataset_name="openwebtext", max_samples=None):
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Load dataset
-    if dataset_name == "openwebtext":
-        dataset = load_dataset("openwebtext", split="train")
-    elif dataset_name == "redpajama":
-        dataset = load_dataset("togethercomputer/RedPajama-Data-1T-Sample", split="train")
+    if dataset_name == "fineweb":
+        print("Loading FineWeb-Edu (high quality, clean web text)...")
+        print("This is filtered for educational content - much cleaner than raw web!")
+        dataset = load_dataset(
+            "HuggingFaceFW/fineweb-edu",
+            name="sample-10BT",
+            split="train"
+        )
+        # Reasonable default
+        if not max_samples:
+            max_samples = 100000  # ~2-3GB of clean text
+            print(f"Using {max_samples:,} documents")
+        
+    elif dataset_name == "tinystories":
+        print("Loading TinyStories (clean, simple stories)...")
+        print("Perfect for quick testing - generates coherent text!")
+        dataset = load_dataset("roneneldan/TinyStories", split="train")
+        if not max_samples:
+            max_samples = 50000  # Quick subset
+            
+    elif dataset_name == "c4":
+        print("Loading C4 (cleaned Common Crawl)...")
+        dataset = load_dataset("allenai/c4", "en", split="train", streaming=True)
+        if not max_samples:
+            max_samples = 100000
+        # Convert streaming to list
+        print(f"Taking {max_samples:,} documents...")
+        dataset = list(dataset.take(max_samples))
+        
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")
     
     # Subsample if requested
-    if max_samples:
+    if max_samples and hasattr(dataset, 'select'):
         dataset = dataset.select(range(min(max_samples, len(dataset))))
     
     # Save to text file
@@ -48,7 +74,26 @@ def download_pretraining_data(dataset_name="openwebtext", max_samples=None):
                 f.write(text + "\n\n")
     
     file_size = output_file.stat().st_size / 1e9
-    print(f"\n✓ Saved {len(dataset):,} documents")
+    num_docs = len(dataset) if hasattr(dataset, '__len__') else max_samples
+    print(f"\n✓ Saved {num_docs:,} documents")
+    print(f"✓ File size: {file_size:.2f} GB")
+    print(f"✓ Location: {output_file}")
+    
+    return output_file
+    
+    # Save to text file
+    output_file = output_dir / "train.txt"
+    print(f"Saving to {output_file}...")
+    
+    with open(output_file, "w", encoding="utf-8") as f:
+        for example in tqdm(dataset, desc="Writing"):
+            text = example.get("text", example.get("content", ""))
+            if text.strip():
+                f.write(text + "\n\n")
+    
+    file_size = output_file.stat().st_size / 1e9
+    num_docs = len(dataset) if hasattr(dataset, '__len__') else max_samples
+    print(f"\n✓ Saved {num_docs:,} documents")
     print(f"✓ File size: {file_size:.2f} GB")
     print(f"✓ Location: {output_file}")
     
@@ -206,15 +251,24 @@ def main():
     
     if choice in ["1", "3"]:
         print("\nPre-training datasets:")
-        print("  1. OpenWebText (8.5GB) - RECOMMENDED")
-        print("  2. RedPajama Sample (larger)")
+        print("  1. FineWeb-Edu (~2-3GB, CLEAN web text) - RECOMMENDED")
+        print("  2. TinyStories (Stories, perfect for testing)")  
+        print("  3. C4 (Common Crawl, very large)")
         
-        pt_choice = input("Choose [1/2]: ").strip()
-        pt_dataset = "openwebtext" if pt_choice == "1" else "redpajama"
+        pt_choice = input("Choose [1/2/3]: ").strip()
+        pt_datasets = ["fineweb", "tinystories", "c4"]
+        pt_dataset = pt_datasets[int(pt_choice) - 1] if pt_choice in ["1", "2", "3"] else "fineweb"
         
         # Option to subsample for quick testing
-        subsample = input("Subsample for quick test? [y/N]: ").strip().lower()
-        max_samples = 10000 if subsample == 'y' else None
+        if pt_dataset == "fineweb":
+            subsample = input("Quick test with 10k docs? (otherwise 100k) [y/N]: ").strip().lower()
+            max_samples = 10000 if subsample == 'y' else None
+        elif pt_dataset == "tinystories":
+            subsample = input("Quick test with 10k stories? [y/N]: ").strip().lower()
+            max_samples = 10000 if subsample == 'y' else None
+        else:
+            subsample = input("How many documents? (default 100k): ").strip()
+            max_samples = int(subsample) if subsample.isdigit() else 100000
         
         download_pretraining_data(pt_dataset, max_samples)
     
