@@ -496,21 +496,21 @@ def main():
         with open(args.config, "r") as f:
             config = json.load(f)
     else:
-        # Optimized config for Colab T4 GPU (15GB VRAM)
-        # Target: ~570M parameters for safe training
+        # Optimized config for Colab T4 GPU with 8-bit optimizer
+        # Target: ~800M parameters with 8-bit optimizer (saves 3.4GB)
         config = {
             "model": {
-                "context_length": 1024,  # Reduced to save memory
-                "n_layers": 24,  # Keep depth
+                "context_length": 2048,  # Longer context for better understanding
+                "n_layers": 24,  # Deep model
                 "n_heads": 16,  # Standard head count
                 "n_kv_heads": 4,  # GQA 4x for efficient inference & smaller KV cache
-                "n_embd": 1280,  # Reduced from 1536 (~570M params total)
+                "n_embd": 1536,  # Large embedding (~800M params total)
                 "dropout": 0.1,
                 "use_gradient_checkpointing": True,  # CRITICAL for memory
             },
             "training": {
                 "batch_size": 1,  # Minimum for T4 GPU
-                "gradient_accumulation_steps": 64,  # Increased to maintain effective batch
+                "gradient_accumulation_steps": 32,  # Effective batch = 32
                 "max_epochs": 10,
                 "learning_rate": 6e-4,  # Higher LR for larger models
                 "weight_decay": 0.1,
@@ -520,8 +520,8 @@ def main():
                 "save_interval": 1,  # Save every epoch
             },
             "data": {
-                "block_size": 1024,  # Match context_length
-                "stride": 512,  # 50% overlap
+                "block_size": 2048,  # Match context_length
+                "stride": 1024,  # 50% overlap for better learning
             },
         }
 
