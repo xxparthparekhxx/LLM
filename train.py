@@ -512,20 +512,20 @@ def main():
         with open(args.config, "r") as f:
             config = json.load(f)
     else:
-        # Optimized config for Colab T4 GPU with 8-bit optimizer
-        # Target: ~800M parameters with 8-bit optimizer (saves 3.4GB)
+        # Optimized for FREE T4 GPU (15GB) with resume headroom
+        # Target: ~700M params, ~13.5GB fresh, ~14GB resume
         config = {
             "model": {
-                "context_length": 2048,  # Longer context for better understanding
-                "n_layers": 24,  # Deep model
+                "context_length": 2048,  # Keep long context
+                "n_layers": 24,  # Keep depth
                 "n_heads": 16,  # Standard head count
-                "n_kv_heads": 4,  # GQA 4x for efficient inference & smaller KV cache
-                "n_embd": 1536,  # Large embedding (~800M params total)
+                "n_kv_heads": 4,  # GQA 4x for efficiency
+                "n_embd": 1408,  # Reduced from 1536 (~700M params)
                 "dropout": 0.1,
                 "use_gradient_checkpointing": True,  # CRITICAL for memory
             },
             "training": {
-                "batch_size": 1,  # Minimum for T4 GPU
+                "batch_size": 1,  # Minimum for free GPU
                 "gradient_accumulation_steps": 32,  # Effective batch = 32
                 "max_epochs": 10,
                 "learning_rate": 6e-4,  # Higher LR for larger models
