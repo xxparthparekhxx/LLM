@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--max_new_tokens", type=int, default=200, help="Length of generation")
     parser.add_argument("--temperature", type=float, default=0.8, help="Sampling temperature")
     parser.add_argument("--top_k", type=int, default=50, help="Top-k sampling")
+    parser.add_argument("--config", type=str, help="Path to config JSON file (optional, for fallback)")
     parser.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"], help="Device to use")
 
     args = parser.parse_args()
@@ -52,14 +53,36 @@ def main():
     print(f"Loading checkpoint from {args.checkpoint}...")
     checkpoint = torch.load(args.checkpoint, map_location=device)
     
-    # Extract config from checkpoint
+    # Extract config from checkpoint or argument
+    model_config_dict = None
+    
     if "config" in checkpoint:
         config = checkpoint["config"]
-        model_config_dict = config["model"]
-        print("Loaded config from checkpoint.")
-    else:
-        print("Error: Checkpoint does not contain config!")
-        return
+        if "model" in config:
+            model_config_dict = config["model"]
+            print("Loaded config from checkpoint.")
+        else:
+            print("Warning: Checkpoint config missing 'model' section.")
+    
+    if model_config_dict is None:
+        if args.config:
+            import json
+            with open(args.config, "r") as f:
+                config = json.load(f)
+            model_config_dict = config["model"]
+            print(f"Loaded config from {args.config}")
+        else:
+            print("Warning: No config found in checkpoint or --config arg.")
+            print("Using default TinyStories-like config as fallback...")
+            model_config_dict = {
+                "context_length": 2048,
+                "n_layers": 24,
+                "n_heads": 16,
+                "n_kv_heads": 4,
+                "n_embd": 1408,
+                "dropout": 0.1,
+                "use_gradient_checkpointing": True,
+            }
 
     # 3. Initialize Model
     print("Initializing model...")

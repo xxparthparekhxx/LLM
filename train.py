@@ -646,6 +646,8 @@ def main():
         "checkpoint_dir": "checkpoints",
         "wandb_project": "llm-training",
         "run_name": f'train_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
+        "model": config["model"],
+        "data": config["data"],
     }
 
     trainer = Trainer(
