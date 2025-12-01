@@ -537,6 +537,26 @@ class SimpleTokenizer:
     def eos_token_id(self) -> int:
         return self.special_tokens['<eos>']
 
+    def save(self, filepath: str):
+        """Save tokenizer vocabulary to file"""
+        data = {
+            'vocab': self.vocab,
+            'special_tokens': self.special_tokens
+        }
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"Tokenizer saved to {filepath}")
+
+    def load(self, filepath: str):
+        """Load tokenizer vocabulary from file"""
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        self.vocab = data['vocab']
+        self.special_tokens = data['special_tokens']
+        self.inverse_vocab = {int(v): k for k, v in self.vocab.items()}
+
+
 
 if __name__ == "__main__":
     # Test BPE tokenizer

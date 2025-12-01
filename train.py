@@ -597,6 +597,10 @@ def main():
     tokenizer = SimpleTokenizer()
     tokenizer.train(texts)
     print(f"Vocabulary size: {tokenizer.vocab_size}")
+    
+    # Save tokenizer
+    tokenizer_path = "tokenizer.json"
+    tokenizer.save(tokenizer_path)
 
     # Create dataset
     print("Creating dataset...")
