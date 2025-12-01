@@ -395,6 +395,29 @@ class Trainer:
         if self.scaler is not None and "scaler_state_dict" in checkpoint:
             self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
         
+        # Try to infer epoch/batch from filename if they seem wrong (e.g. 0)
+        # This helps if the user renamed the file or if saving logic had a bug
+        try:
+            import re
+            filename = os.path.basename(checkpoint_path)
+            # Look for patterns like "epoch1_batch2000" or "epoch_1_batch_2000"
+            match = re.search(r"epoch[_]?(\d+)[_]?batch[_]?(\d+)", filename)
+            if match:
+                filename_epoch = int(match.group(1))
+                filename_batch = int(match.group(2))
+                
+                if filename_batch != self.current_batch:
+                    print(f"⚠️  Warning: Checkpoint content batch ({self.current_batch}) matches filename batch ({filename_batch}) mismatch.")
+                    print(f"   Trusting filename and updating current_batch to {filename_batch}")
+                    self.current_batch = filename_batch
+                    
+                if filename_epoch != self.current_epoch:
+                    print(f"⚠️  Warning: Checkpoint content epoch ({self.current_epoch}) matches filename epoch ({filename_epoch}) mismatch.")
+                    print(f"   Trusting filename and updating current_epoch to {filename_epoch}")
+                    self.current_epoch = filename_epoch
+        except Exception as e:
+            print(f"Warning: Could not infer batch/epoch from filename: {e}")
+
         reason = checkpoint.get("reason", "unknown")
         timestamp = checkpoint.get("timestamp", "unknown")
         print(f"✓ Loaded checkpoint from epoch {self.current_epoch}, batch {self.current_batch}")
@@ -417,6 +440,9 @@ class Trainer:
         print(f"Max epochs: {max_epochs}")
         print(f"Mixed precision: {self.use_amp} ({'bfloat16' if self.is_tpu else 'float16'})")
         print(f"{'='*60}\n")
+        
+        # Reset checkpoint timer to avoid immediate save if setup took long
+        self.last_checkpoint_time = time.time()
 
         start_time = time.time()
 
