@@ -173,6 +173,7 @@ class Trainer:
         )
 
         for batch_idx, (x, y) in enumerate(pbar, start=start_batch):
+            self.current_batch = batch_idx  # Update current batch for checkpoints
             if not self.is_tpu:
                 x, y = x.to(self.device), y.to(self.device)
 
