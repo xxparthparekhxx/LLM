@@ -86,6 +86,41 @@ def main():
 
     # 3. Initialize Model
     print("Initializing model...")
+    
+    # Check for vocab size mismatch
+    checkpoint_vocab_size = checkpoint["model_state_dict"]["token_embedding.weight"].shape[0]
+    if tokenizer.vocab_size != checkpoint_vocab_size:
+        print(f"\n⚠️  VOCAB SIZE MISMATCH!")
+        print(f"Tokenizer has {tokenizer.vocab_size} tokens, but model expects {checkpoint_vocab_size}.")
+        
+        if os.path.exists(tokenizer_path):
+            print(f"The existing {tokenizer_path} might be stale or built from different data.")
+            print("Attempting to rebuild tokenizer from provided data...")
+            
+            # Force rebuild
+            if os.path.isfile(args.data):
+                texts = load_text_file(args.data)
+            else:
+                texts = load_directory(args.data)
+            
+            print(f"Loaded {len(texts)} texts. Rebuilding tokenizer...")
+            tokenizer = SimpleTokenizer()
+            tokenizer.train(texts)
+            print(f"New vocabulary size: {tokenizer.vocab_size}")
+            
+            # Save the correct one
+            tokenizer.save(tokenizer_path)
+            
+            if tokenizer.vocab_size != checkpoint_vocab_size:
+                print(f"❌ Error: Rebuilt tokenizer still has {tokenizer.vocab_size} tokens, expected {checkpoint_vocab_size}.")
+                print("Please ensure you are using the EXACT same data used for training.")
+                return
+            else:
+                print("✓ Mismatch resolved! Proceeding...")
+        else:
+            print("❌ Error: Tokenizer mismatch and no tokenizer.json to refresh.")
+            return
+
     # Ensure vocab size matches tokenizer
     model_config_dict["vocab_size"] = tokenizer.vocab_size
     model_config = ModelConfig(**model_config_dict)
