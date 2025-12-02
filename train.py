@@ -711,7 +711,9 @@ def main():
 
     # Create model
     print("Creating model...")
-    model_config = ModelConfig(vocab_size=tokenizer.vocab_size, **config["model"])
+    # Ensure vocab size matches tokenizer
+    config["model"]["vocab_size"] = tokenizer.vocab_size
+    model_config = ModelConfig(**config["model"])
     model = LanguageModel(model_config)
 
     # Create trainer
