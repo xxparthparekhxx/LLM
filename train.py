@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler, autocast as cuda_autocast
 import os
 # Disable tokenizers parallelism to avoid deadlocks in forked processes
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+# os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import torch
 import torch.nn as nn
@@ -734,7 +734,7 @@ def main():
 
     # Create data loaders
     # For TPU, reduce num_workers to avoid issues
-    num_workers = 0 if device == "tpu" else 2
+    num_workers = 0 if device == "tpu" else 0
     
     # Streaming datasets don't support shuffle=True in DataLoader
     is_streaming = isinstance(train_dataset, StreamingTextDataset)

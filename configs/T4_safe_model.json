@@ -5,7 +5,7 @@
         "n_layers": 24,
         "n_heads": 16,
         "n_kv_heads": 4,
-        "n_embd": 1224,
+        "n_embd": 1248,
         "dropout": 0.1,
         "bias": false,
         "use_rope": true,
@@ -16,7 +16,7 @@
     },
     "training": {
         "batch_size": 1,
-        "gradient_accumulation_steps": 64,
+        "gradient_accumulation_steps": 4,
         "max_epochs": 10,
         "learning_rate": 6e-4,
         "weight_decay": 0.1,
