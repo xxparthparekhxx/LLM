@@ -148,11 +148,18 @@ class Trainer:
         else:
             train_loader = self.train_loader
 
-        total_batches = len(train_loader)
+        try:
+            total_batches = len(train_loader)
+        except TypeError:
+            total_batches = None
         
         # Skip to current batch if resuming
         if self.current_batch > 0:
-            print(f"\nResuming from batch {self.current_batch}/{total_batches}")
+            if total_batches:
+                print(f"\nResuming from batch {self.current_batch}/{total_batches}")
+            else:
+                print(f"\nResuming from batch {self.current_batch}")
+                
             # Create iterator and skip ahead
             train_iter = iter(train_loader)
             for _ in range(self.current_batch):
@@ -251,6 +258,8 @@ class Trainer:
                 and self.global_step % self.config.get("log_interval", 100) == 0
             ):
                 import wandb
+                
+                progress_str = f"{batch_idx}/{total_batches}" if total_batches else f"{batch_idx}"
 
                 wandb.log(
                     {
@@ -258,7 +267,7 @@ class Trainer:
                         * self.config.get("gradient_accumulation_steps", 1),
                         "train/learning_rate": self.scheduler.get_last_lr()[0],
                         "train/step": self.global_step,
-                        "train/epoch_progress": f"{batch_idx}/{total_batches}",
+                        "train/epoch_progress": progress_str,
                     }
                 )
             
