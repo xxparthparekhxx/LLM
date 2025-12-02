@@ -297,7 +297,12 @@ class Trainer:
         else:
             val_loader = self.val_loader
 
-        pbar = tqdm(val_loader, desc="Validating")
+        try:
+            total_batches = len(val_loader)
+        except TypeError:
+            total_batches = None
+            
+        pbar = tqdm(val_loader, desc="Validating", total=total_batches)
 
         for x, y in pbar:
             if not self.is_tpu:
