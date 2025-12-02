@@ -436,8 +436,15 @@ class Trainer:
         print(f"Device: {self.device}")
         print(f"Device Type: {'TPU' if self.is_tpu else 'GPU/CPU'}")
         print(f"Model parameters: {self.model.get_num_params() / 1e6:.2f}M")
-        print(f"Training batches: {len(self.train_loader)}")
-        print(f"Validation batches: {len(self.val_loader)}")
+        try:
+            print(f"Training batches: {len(self.train_loader)}")
+        except TypeError:
+            print("Training batches: Unknown (Streaming)")
+            
+        try:
+            print(f"Validation batches: {len(self.val_loader)}")
+        except TypeError:
+            print("Validation batches: Unknown (Streaming)")
         print(f"Max epochs: {max_epochs}")
         print(f"Mixed precision: {self.use_amp} ({'bfloat16' if self.is_tpu else 'float16'})")
         print(f"{'='*60}\n")
