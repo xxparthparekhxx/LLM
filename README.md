@@ -1,188 +1,117 @@
-# Modern LLM Implementation from Scratch
+# Production-Ready GPT Implementation
 
-A complete, production-quality language model implementation with modern transformer architecture and training pipeline.
+A high-performance, production-ready implementation of a GPT-style Large Language Model (LLM) in PyTorch. This project is designed to match or exceed the architectural quality of LLaMA 2 and GPT-3/4, featuring modern optimizations for efficient training and inference.
 
-## Features
+## 🚀 Key Features
 
-### Model Architecture
-- **Modern Transformer Components**:
-  - Rotary Position Embeddings (RoPE) for better position encoding
-  - RMSNorm for improved stability
-  - SwiGLU activation function
-  - Flash Attention support (when available)
-  - Pre-norm architecture
-  - Weight tying between input and output embeddings
+*   **Modern Architecture**:
+    *   **Rotary Position Embeddings (RoPE)** for better long-context performance.
+    *   **SwiGLU Activation** for improved convergence.
+    *   **RMSNorm** for training stability.
+    *   **Grouped Query Attention (GQA)** for faster inference and lower memory usage.
+    *   **Flash Attention 2** support for high-speed training.
+*   **Efficiency**:
+    *   **Streaming Datasets**: Train on terabyte-scale datasets (e.g., FineWeb-Edu, The Stack) without RAM issues.
+    *   **Gradient Checkpointing**: Train larger models on limited GPU memory.
+    *   **KV Caching**: 2-4x faster text generation.
+    *   **8-bit Optimizer**: Optional integration with `bitsandbytes` for memory savings.
+*   **Production Ready**:
+    *   **Tokenizer Persistence**: Save and load tokenizers to ensure consistent vocabulary.
+    *   **Checkpointing**: Robust save/resume functionality with automatic fallback.
+    *   **Configurable**: JSON-based configuration for easy scaling (from TinyStories to 1B+ parameters).
 
-### Training Pipeline
-- **Advanced Training Features**:
-  - Mixed precision training (AMP)
-  - Gradient accumulation
-  - Gradient clipping
-  - Learning rate scheduling (Cosine Annealing)
-  - Early stopping
-  - Checkpointing (best model, latest, periodic)
-  - Optional Wandb integration
+## 🛠️ Installation
 
-### Tokenization
-- **State-of-the-Art BPE Tokenizer**: 
-  - Fast BPE algorithm with priority queue optimization
-  - Advanced pre-tokenization (GPT-2/3/4 style regex patterns)
-  - Unicode normalization (NFD, NFC, NFKD, NFKC)
-  - Special tokens handling (PAD, UNK, BOS, EOS, MASK)
-  - Byte-level encoding for robust UTF-8 handling
-  - Performance optimizations with caching
-  - Support for custom special tokens
-  - Lowercase and prefix space options
-- **Simple Tokenizer**: Character-level tokenizer for quick testing
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/xxparthparekhxx/LLM.git
+    cd LLM
+    ```
 
-### Data Processing
-- Efficient dataset handling with sliding window
-- Support for text files, JSONL, and directories
-- Train/validation splitting
+2.  Install dependencies:
+    ```bash
+    pip install torch numpy tqdm wandb datasets
+    ```
 
-### Chat Interface
-- Interactive chat with streaming generation
-- Conversation history management
-- Save/load conversations
+    *Optional (for 8-bit optimizer):*
+    ```bash
+    pip install bitsandbytes
+    ```
 
-## Installation
+## 🏃‍♂️ Usage
 
-```bash
-pip install -r requirements.txt
-```
+### 1. Training
 
-## Quick Start
+You can train on local text files or stream directly from HuggingFace.
 
-### 1. Prepare Data
-
-Create a text file with your training data (one text per line or paragraph):
+**Option A: Streaming from HuggingFace (Recommended for Large Scale)**
+Train on massive datasets like FineWeb-Edu or The Stack. The tokenizer will be automatically trained on a sample if not provided.
 
 ```bash
-# Example: data.txt
-The quick brown fox jumps over the lazy dog.
-Machine learning is fascinating.
-...
+# Train a 1B parameter model on FineWeb-Edu
+python train.py \
+    --data HuggingFaceFW/fineweb-edu/sample-10BT \
+    --config configs/1B_model.json \
+    --batch_size 4 \
+    --gradient_accumulation_steps 8
 ```
 
-### 2. Train Model
+**Option B: Local Text Files**
+Train on a local file or directory.
 
 ```bash
-python train.py --data data.txt --config config.json
+python train.py --data my_dataset.txt
 ```
 
-Or use default config:
+### 2. Text Generation
+
+Generate text using a trained checkpoint. The script automatically handles tokenizer loading and configuration.
 
 ```bash
-python train.py --data data.txt
+python generate.py \
+    --checkpoint checkpoints/latest_checkpoint.pt \
+    --prompt "Once upon a time" \
+    --num_samples 3
 ```
 
-### 3. Chat with Model
+### 3. Interactive Chat
+
+Chat with your trained model in real-time.
 
 ```bash
-python chat.py --checkpoint checkpoints/best.pt
+python chat.py --checkpoint checkpoints/latest_checkpoint.pt
 ```
 
-## Configuration
+## ⚙️ Configuration
 
-Edit `config.json` to customize:
+The model architecture and training parameters are fully configurable via JSON files.
 
-- **Model**: Architecture parameters (layers, heads, embedding size, etc.)
-- **Training**: Training hyperparameters (batch size, learning rate, etc.)
-- **Data**: Data processing parameters (block size, stride, etc.)
-
-## Project Structure
-
-```
-.
-├── model.py          # Language model architecture
-├── tokenizer.py      # BPE and simple tokenizers
-├── data_utils.py     # Data processing utilities
-├── train.py          # Training pipeline
-├── chat.py           # Interactive chat interface
-├── config.json       # Configuration file
-├── requirements.txt  # Dependencies
-└── README.md         # This file
-```
-
-## Advanced Usage
-
-### Using the State-of-the-Art BPE Tokenizer
-
-The new BPE tokenizer includes many advanced features:
-
-```python
-from tokenizer import BPETokenizer
-
-# Create tokenizer with advanced options
-tokenizer = BPETokenizer(
-    vocab_size=50000,
-    special_tokens=['<custom>'],  # Add custom special tokens
-    normalization='NFD',  # Unicode normalization: NFD, NFC, NFKD, NFKC, or None
-    lowercase=False,  # Whether to lowercase text
-    add_prefix_space=False  # Whether to add prefix space
-)
-
-# Train on your data
-texts = ["Your training texts here..."]
-tokenizer.train(texts, verbose=True)
-
-# Encode/decode with special tokens
-encoded = tokenizer.encode("Hello world!", add_special_tokens=True)
-decoded = tokenizer.decode(encoded, skip_special_tokens=True)
-
-# Add more special tokens after training
-tokenizer.add_special_tokens(['<new_token>'])
-
-# Save/load tokenizer
-tokenizer.save('my_tokenizer.json')
-tokenizer.load('my_tokenizer.json')
+**Example: `configs/1B_model.json`**
+```json
+{
+    "model": {
+        "n_layers": 24,
+        "n_heads": 24,
+        "n_embd": 1536,
+        "context_length": 4096,
+        "vocab_size": 50257
+    },
+    "training": {
+        "batch_size": 16,
+        "learning_rate": 3e-4
+    }
+}
 ```
 
-### Resume Training
+## 📂 Project Structure
 
-```bash
-python train.py --data data.txt --resume checkpoints/latest.pt
-```
+*   `train.py`: Main training script with streaming support.
+*   `generate.py`: Efficient text generation script.
+*   `model.py`: The core GPT model implementation (RoPE, GQA, FlashAttn).
+*   `data_utils.py`: Data loading utilities (StreamingDataset, TextDataset).
+*   `tokenizer.py`: BPE and Simple tokenizer implementations.
+*   `configs/`: Configuration files for different model sizes.
 
-### Use Wandb Logging
+## 🤝 Contributing
 
-```bash
-python train.py --data data.txt --use-wandb
-```
-
-### Custom Config
-
-```bash
-python train.py --data data.txt --config my_config.json
-```
-
-### Load BPE Tokenizer
-
-```bash
-python chat.py --checkpoint checkpoints/best.pt --tokenizer tokenizer.json
-```
-
-## Model Architecture Details
-
-The model uses a modern GPT-style architecture with:
-
-1. **Embeddings**: Token embeddings + optional position embeddings (if not using RoPE)
-2. **Transformer Blocks**: 
-   - Pre-norm architecture
-   - Multi-head self-attention with RoPE
-   - Feed-forward network with SwiGLU
-   - RMSNorm for normalization
-3. **Output**: Language modeling head with weight tying
-
-## Training Tips
-
-1. **Start Small**: Use a small model first to test your pipeline
-2. **Monitor Loss**: Watch validation loss to avoid overfitting
-3. **Adjust Learning Rate**: If loss is unstable, reduce learning rate
-4. **Gradient Accumulation**: Use gradient accumulation to simulate larger batch sizes
-5. **Mixed Precision**: Enable AMP for faster training on GPUs
-
-## License
-
-MIT License - feel free to use and modify as needed!
-
+Contributions are welcome! Please feel free to submit a Pull Request.
