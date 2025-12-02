@@ -608,6 +608,7 @@ def main():
     )
     parser.add_argument("--use-wandb", action="store_true", help="Use wandb for logging")
     parser.add_argument("--tokenizer", type=str, help="Path to pre-trained tokenizer JSON")
+    parser.add_argument("--stream", action="store_true", help="Use streaming mode (slower, for massive datasets)")
 
     args = parser.parse_args()
 
@@ -725,29 +726,60 @@ def main():
 
     # 2. Load Data & Create Dataset
     print("Loading data...")
-    from data_utils import load_text_file, load_directory, StreamingTextDataset
-
+    
     # Check if args.data is a HuggingFace dataset (contains '/')
     if "/" in args.data and not os.path.exists(args.data):
         print(f"Detected HuggingFace dataset: {args.data}")
-        # Create streaming dataset
-        train_dataset = StreamingTextDataset(
-            [args.data], 
-            tokenizer, 
-            block_size=config["data"]["block_size"],
-            split="train"
-        )
-        # For streaming, we can't easily split validation, so we use the same stream or a different split
-        try:
-            val_dataset = StreamingTextDataset(
+        
+        if args.stream:
+            # Use streaming mode (slower, for massive datasets)
+            print("Using STREAMING mode (slower)")
+            from data_utils_optimized import StreamingTextDataset
+            train_dataset = StreamingTextDataset(
                 [args.data], 
                 tokenizer, 
                 block_size=config["data"]["block_size"],
-                split="validation" # Try to load validation split
+                split="train"
             )
-        except:
-            print("Warning: No validation split found, using train split for validation (not ideal)")
-            val_dataset = train_dataset
+            # For streaming, we can't easily split validation, so we use the same stream or a different split
+            try:
+                val_dataset = StreamingTextDataset(
+                    [args.data], 
+                    tokenizer, 
+                    block_size=config["data"]["block_size"],
+                    split="validation" # Try to load validation split
+                )
+            except:
+                print("Warning: No validation split found, using train split for validation (not ideal)")
+                val_dataset = train_dataset
+        else:
+            # Use cached mode (FAST, recommended)
+            print("Using CACHED mode (fast, downloads once)")
+            from cached_dataset import CachedHFDataset
+            train_dataset = CachedHFDataset(
+                args.data,
+                tokenizer,
+                block_size=config["data"]["block_size"],
+                split="train",
+                max_samples=None  # Use all samples
+            )
+            # Try to load validation split
+            try:
+                val_dataset = CachedHFDataset(
+                    args.data,
+                    tokenizer,
+                    block_size=config["data"]["block_size"],
+                    split="validation",
+                    max_samples=10000  # Limit val set size
+                )
+            except:
+                print("Warning: No validation split found, using train split for validation (not ideal)")
+                # Use a subset of train for validation
+                from torch.utils.data import Subset
+                import numpy as np
+                val_size = min(10000, len(train_dataset) // 10)
+                val_indices = np.random.choice(len(train_dataset), val_size, replace=False)
+                val_dataset = Subset(train_dataset, val_indices)
             
         dataset = None # Marker that we are using streaming
     else:
