@@ -157,12 +157,13 @@ class BPETokenizer:
             prev_char = char
         return pairs
     
-    def _get_stats(self, splits: Dict[str, List[str]]) -> Dict[Tuple[str, str], int]:
+    def _get_stats(self, splits: Dict[str, List[str]], word_freqs: Dict[str, int]) -> Dict[Tuple[str, str], int]:
         """Get statistics of adjacent pairs using priority queue"""
         pairs = defaultdict(int)
         
-        for word, freq in splits.items():
-            word_pairs = self._get_pairs(word)
+        for word, freq in word_freqs.items():
+            word_splits = splits[word]
+            word_pairs = self._get_pairs(word_splits)
             for pair in word_pairs:
                 pairs[pair] += freq
         
@@ -236,7 +237,7 @@ class BPETokenizer:
         # Use priority queue for efficient pair selection
         for i in range(num_merges):
             # Get pair statistics
-            pairs = self._get_stats(splits)
+            pairs = self._get_stats(splits, word_freqs)
             
             if not pairs:
                 if verbose:
