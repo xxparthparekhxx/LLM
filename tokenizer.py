@@ -61,9 +61,16 @@ class BPETokenizer:
         self.unicode_to_byte: Dict[str, int] = {}
         
         # Pre-tokenization regex (GPT-2/3/4 style)
-        self.pretokenization_pattern = re.compile(
-            r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-        )
+        try:
+            import regex as re_impl
+            self.pretokenization_pattern = re_impl.compile(
+                r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+            )
+        except ImportError:
+            # Fallback to standard re module with simplified pattern (no unicode properties)
+            self.pretokenization_pattern = re.compile(
+                r"""'s|'t|'re|'ve|'m|'ll|'d| ?\w+| ?\d+| ?[^\s\w\d]+|\s+(?!\S)|\s+"""
+            )
         
         # Caching for performance
         self._encode_cache: Dict[str, List[int]] = {}
