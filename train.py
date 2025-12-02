@@ -631,7 +631,11 @@ def main():
         
         # Save tokenizer
         tokenizer.save("tokenizer.json")
-        ckpt_tokenizer_path = os.path.join(training_config["checkpoint_dir"], "tokenizer.json")
+        
+        # Also save to checkpoint directory for portability
+        ckpt_dir = config["training"].get("checkpoint_dir", "checkpoints")
+        os.makedirs(ckpt_dir, exist_ok=True)
+        ckpt_tokenizer_path = os.path.join(ckpt_dir, "tokenizer.json")
         tokenizer.save(ckpt_tokenizer_path)
 
     # 2. Load Data & Create Dataset
