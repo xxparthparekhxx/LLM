@@ -198,6 +198,76 @@ class BPETokenizer:
             texts: List of training texts
             verbose: Whether to print progress
         """
+        # Try to use HuggingFace tokenizers library for speed
+        try:
+            from tokenizers import ByteLevelBPETokenizer
+            from tokenizers.models import BPE
+            from tokenizers.trainers import BpeTrainer
+            from tokenizers.pre_tokenizers import ByteLevel
+            
+            if verbose:
+                print("Using HuggingFace tokenizers library for fast training...")
+            
+            # Create HF tokenizer
+            hf_tokenizer = ByteLevelBPETokenizer()
+            
+            # Train
+            hf_tokenizer.train_from_iterator(
+                texts, 
+                vocab_size=self.vocab_size,
+                min_frequency=2,
+                show_progress=verbose,
+                special_tokens=list(self.special_tokens.keys())
+            )
+            
+            # Sync back to our Python implementation for compatibility
+            if verbose:
+                print("Syncing vocabulary...")
+                
+            # Get vocab
+            self.vocab = hf_tokenizer.get_vocab()
+            self.inverse_vocab = {v: k for k, v in self.vocab.items()}
+            
+            # Get merges - this is a bit tricky as HF doesn't expose them directly in the same format
+            # But we can save to a temp file and load it back if needed, or just rely on vocab
+            # For this simple implementation, we'll trust the vocab is enough for simple encoding
+            # or we can try to extract merges from the model
+            
+            # Save to a temporary file to extract everything cleanly
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+                hf_tokenizer.save(tmp.name)
+                tmp_path = tmp.name
+            
+            # Load back using our load method? No, format is different.
+            # We just need to ensure our save/load works.
+            # Our save method expects self.vocab and self.merges.
+            
+            # Let's parse the saved file to get merges
+            with open(tmp_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            # HF saves merges in 'model' -> 'merges'
+            if 'model' in data and 'merges' in data['model']:
+                self.merges = [tuple(m.split(' ')) for m in data['model']['merges']]
+            
+            # Clean up
+            try:
+                os.remove(tmp_path)
+            except:
+                pass
+                
+            if verbose:
+                print(f"Training complete! Vocab size: {len(self.vocab)}")
+            
+            return
+            
+        except ImportError:
+            if verbose:
+                print("HuggingFace tokenizers not found. Using slow pure-Python implementation.")
+                print("Install tokenizers for faster training: pip install tokenizers")
+        
+        # Fallback to slow Python implementation
         if verbose:
             print(f"Training BPE tokenizer on {len(texts)} texts...")
             print(f"  Vocab size target: {self.vocab_size}")
@@ -209,6 +279,14 @@ class BPETokenizer:
         
         if verbose:
             print(f"  Unique words: {len(word_freqs)}")
+            
+        # Optimization: Filter rare words to speed up training
+        # For large vocabularies, we don't need to merge pairs that appear only once
+        if len(word_freqs) > 20000:
+            print("  Filtering rare words (freq < 2) to speed up training...")
+            word_freqs = {k: v for k, v in word_freqs.items() if v >= 2}
+            if verbose:
+                print(f"  Unique words after filtering: {len(word_freqs)}")
         
         # Convert words to byte-level unicode
         splits: Dict[str, List[str]] = {}
