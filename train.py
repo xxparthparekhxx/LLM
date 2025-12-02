@@ -15,6 +15,18 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler, autocast as cuda_autocast
 import os
+# Disable tokenizers parallelism to avoid deadlocks in forked processes
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+# Handle GradScaler deprecation
+try:
+    from torch.amp import GradScaler, autocast as cuda_autocast
+except ImportError:
+    from torch.cuda.amp import GradScaler, autocast as cuda_autocast
+
 import json
 from pathlib import Path
 from tqdm import tqdm
@@ -91,7 +103,14 @@ class Trainer:
             self.scaler = None
         else:
             self.use_amp = self.use_amp and self.device == "cuda"
-            self.scaler = GradScaler() if self.use_amp else None
+            # Initialize GradScaler with 'cuda' device if using new API, or default for old
+            if self.use_amp:
+                try:
+                    self.scaler = GradScaler('cuda')
+                except TypeError:
+                    self.scaler = GradScaler()
+            else:
+                self.scaler = None
 
         # Training state
         self.current_epoch = 0
