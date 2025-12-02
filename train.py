@@ -774,3 +774,7 @@ def main():
     trainer.train()
 
     print("\nTraining complete!")
+
+
+if __name__ == "__main__":
+    main()
