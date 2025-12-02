@@ -604,7 +604,8 @@ def main():
 
     # 1. Initialize Tokenizer (Must be done before dataset creation)
     print("Initializing tokenizer...")
-    tokenizer = SimpleTokenizer()
+    # Use BPETokenizer for better quality
+    tokenizer = BPETokenizer(vocab_size=config["model"].get("vocab_size", 50257))
     
     if args.tokenizer and os.path.exists(args.tokenizer):
         print(f"Loading tokenizer from {args.tokenizer}...")
@@ -634,6 +635,13 @@ def main():
                  sample_texts = [item["text"] for item in ds_sample if item["text"]]
                  print(f"Collected {len(sample_texts)} samples for tokenizer training")
                  tokenizer.train(sample_texts)
+                 
+                 # Clean up memory
+                 del ds_sample
+                 del sample_texts
+                 import gc
+                 gc.collect()
+                 
              except Exception as e:
                  print(f"Error training tokenizer on stream: {e}")
                  print("Please provide a pre-trained tokenizer with --tokenizer")
@@ -720,8 +728,6 @@ def main():
         pin_memory=(device == "cuda"),
     )
     
-
-
     val_loader = create_dataloader(
         val_dataset,
         batch_size=config["training"]["batch_size"],
@@ -759,12 +765,12 @@ def main():
     # Resume from checkpoint if specified
     if args.resume:
         trainer.load_checkpoint(args.resume)
+        # Verify tokenizer match
+        if trainer.model.token_embedding.weight.shape[0] != tokenizer.vocab_size:
+            print(f"⚠️ Warning: Model vocab size ({trainer.model.token_embedding.weight.shape[0]}) != Tokenizer vocab size ({tokenizer.vocab_size})")
+            print("   This might cause errors. Consider rebuilding tokenizer or model.")
 
     # Train
     trainer.train()
 
     print("\nTraining complete!")
-
-
-if __name__ == "__main__":
-    main()

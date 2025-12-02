@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from model import LanguageModel, ModelConfig
-from tokenizer import SimpleTokenizer
+from tokenizer import BPETokenizer
 from data_utils import load_text_file, load_directory
 
 def main():
@@ -27,7 +27,7 @@ def main():
     print(f"Using device: {device}")
 
     # 1. Load Data & Build Tokenizer
-    tokenizer = SimpleTokenizer()
+    tokenizer = BPETokenizer()
     
     # Priority 1: Tokenizer in the same directory as the checkpoint
     ckpt_dir = os.path.dirname(args.checkpoint)
