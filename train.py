@@ -39,7 +39,9 @@ import sys
 from model import LanguageModel, ModelConfig
 from data_utils import TextDataset, create_dataloader, split_dataset
 from tokenizer import SimpleTokenizer, BPETokenizer
-from data_utils import load_text_file, load_directory, StreamingTextDataset
+from data_utils import load_text_file, load_directory
+from data_utils_optimized import StreamingTextDataset
+
 from profiler import TrainingProfiler, RICH_AVAILABLE
 if RICH_AVAILABLE:
     from rich.live import Live

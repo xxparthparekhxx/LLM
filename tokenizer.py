@@ -655,6 +655,36 @@ class BPETokenizer:
         
         return tokens
     
+    def encode_batch(self, texts: List[str], add_special_tokens: bool = True) -> List[List[int]]:
+        """
+        Encode a batch of texts efficiently
+        
+        Args:
+            texts: List of input texts
+            add_special_tokens: Whether to add BOS/EOS tokens
+        
+        Returns:
+            List of lists of token ids
+        """
+        if self.hf_tokenizer:
+            # Fast path using HuggingFace tokenizer
+            encoded_batch = self.hf_tokenizer.encode_batch(texts)
+            
+            batch_ids = []
+            for encoded in encoded_batch:
+                ids = list(encoded.ids)
+                tokens = []
+                if add_special_tokens and '<bos>' in self.special_tokens:
+                    tokens.append(self.special_tokens['<bos>'])
+                tokens.extend(ids)
+                if add_special_tokens and '<eos>' in self.special_tokens:
+                    tokens.append(self.special_tokens['<eos>'])
+                batch_ids.append(tokens)
+            return batch_ids
+        
+        # Fallback to slow loop
+        return [self.encode(text, add_special_tokens) for text in texts]
+    
     def decode(self, token_ids: List[int], skip_special_tokens: bool = True) -> str:
         """
         Decode token ids to text
