@@ -40,6 +40,9 @@ from model import LanguageModel, ModelConfig
 from data_utils import TextDataset, create_dataloader, split_dataset
 from tokenizer import SimpleTokenizer, BPETokenizer
 from data_utils import load_text_file, load_directory, StreamingTextDataset
+from profiler import TrainingProfiler, RICH_AVAILABLE
+if RICH_AVAILABLE:
+    from rich.live import Live
 
 
 class Trainer:
@@ -125,6 +128,9 @@ class Trainer:
         self.checkpoint_dir = Path(config.get("checkpoint_dir", "checkpoints"))
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         
+        # Profiler
+        self.profiler = TrainingProfiler()
+        
         # Setup signal handler for Ctrl+C
         signal.signal(signal.SIGINT, self._signal_handler)
 
@@ -199,77 +205,106 @@ class Trainer:
             total=total_batches
         )
 
-        for batch_idx, (x, y) in enumerate(pbar, start=start_batch):
-            self.current_batch = batch_idx  # Update current batch for checkpoints
-            if not self.is_tpu:
-                x, y = x.to(self.device), y.to(self.device)
-
-            # Forward pass with mixed precision
-            if self.use_amp:
-                if self.is_tpu:
-                    # TPU: use XLA autocast with bfloat16
-                    with torch.autocast(device_type='xla', dtype=torch.bfloat16):
-                        logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
-                else:
-                    # CUDA: use standard autocast
-                    with cuda_autocast("cuda"):
-                        logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
-                        
-                loss = loss / self.config.get("gradient_accumulation_steps", 1)
-            else:
-                logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
-                loss = loss / self.config.get("gradient_accumulation_steps", 1)
-
-            # Backward pass
-            if self.use_amp and not self.is_tpu:
-                self.scaler.scale(loss).backward()
-            else:
-                loss.backward()
-
-            # Gradient accumulation
-            if (batch_idx + 1) % self.config.get("gradient_accumulation_steps", 1) == 0:
-                # Gradient clipping
-                if self.use_amp and not self.is_tpu:
-                    self.scaler.unscale_(self.optimizer)
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self.config.get("max_grad_norm", 1.0)
-                    )
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                else:
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self.config.get("max_grad_norm", 1.0)
-                    )
-                    if self.is_tpu:
-                        # Use XLA optimizer step
-                        self.xm.optimizer_step(self.optimizer)
-                    else:
-                        self.optimizer.step()
-
-                self.optimizer.zero_grad()
-                
-                # Mark step for TPU to execute graph
-                if self.is_tpu:
-                    self.xm.mark_step()
-                
-                self.global_step += 1
+        # Live display context
+        live_ctx = Live(self.profiler.generate_table(), refresh_per_second=4) if RICH_AVAILABLE else None
+        
+        if live_ctx:
+            live_ctx.start()
             
-            # Mark step after backward for gradient accumulation
-            elif self.is_tpu:
-                self.xm.mark_step()
+        try:
+            self.profiler.start("Data Loading")
+            
+            for batch_idx, (x, y) in enumerate(pbar, start=start_batch):
+                self.profiler.stop("Data Loading")
+                self.current_batch = batch_idx  # Update current batch for checkpoints
+                
+                if not self.is_tpu:
+                    x, y = x.to(self.device), y.to(self.device)
+    
+                # Forward pass with mixed precision
+                self.profiler.start("Forward Pass")
+                if self.use_amp:
+                    if self.is_tpu:
+                        # TPU: use XLA autocast with bfloat16
+                        with torch.autocast(device_type='xla', dtype=torch.bfloat16):
+                            logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
+                    else:
+                        # CUDA: use standard autocast
+                        with cuda_autocast("cuda"):
+                            logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
+                            
+                    loss = loss / self.config.get("gradient_accumulation_steps", 1)
+                else:
+                    logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
+                    loss = loss / self.config.get("gradient_accumulation_steps", 1)
+                self.profiler.stop("Forward Pass")
+    
+                # Backward pass
+                self.profiler.start("Backward Pass")
+                if self.use_amp and not self.is_tpu:
+                    self.scaler.scale(loss).backward()
+                else:
+                    loss.backward()
+                self.profiler.stop("Backward Pass")
+    
+                # Gradient accumulation
+                if (batch_idx + 1) % self.config.get("gradient_accumulation_steps", 1) == 0:
+                    self.profiler.start("Optimizer Step")
+                    # Gradient clipping
+                    if self.use_amp and not self.is_tpu:
+                        self.scaler.unscale_(self.optimizer)
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.config.get("max_grad_norm", 1.0)
+                        )
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
+                    else:
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.config.get("max_grad_norm", 1.0)
+                        )
+                        if self.is_tpu:
+                            # Use XLA optimizer step
+                            self.xm.optimizer_step(self.optimizer)
+                        else:
+                            self.optimizer.step()
+    
+                    self.optimizer.zero_grad()
+                    
+                    # Mark step for TPU to execute graph
+                    if self.is_tpu:
+                        self.xm.mark_step()
+                    
+                    self.global_step += 1
+                    self.profiler.stop("Optimizer Step")
+                
+                # Mark step after backward for gradient accumulation
+                elif self.is_tpu:
+                    self.xm.mark_step()
+    
+                total_loss += loss.item() * self.config.get(
+                    "gradient_accumulation_steps", 1
+                )
+                num_batches += 1
+                
+                self.profiler.step()
+    
+                # Update progress bar
+                if RICH_AVAILABLE and live_ctx:
+                    live_ctx.update(self.profiler.generate_table())
+                else:
+                    pbar.set_postfix(
+                        {
+                            "loss": f'{loss.item() * self.config.get("gradient_accumulation_steps", 1):.4f}',
+                            "lr": f"{self.scheduler.get_last_lr()[0]:.6f}",
+                        }
+                    )
+                
+                # Start timing next data load
+                self.profiler.start("Data Loading")
 
-            total_loss += loss.item() * self.config.get(
-                "gradient_accumulation_steps", 1
-            )
-            num_batches += 1
-
-            # Update progress bar
-            pbar.set_postfix(
-                {
-                    "loss": f'{loss.item() * self.config.get("gradient_accumulation_steps", 1):.4f}',
-                    "lr": f"{self.scheduler.get_last_lr()[0]:.6f}",
-                }
-            )
+        finally:
+            if live_ctx:
+                live_ctx.stop()
 
             # Log to wandb
             if (
