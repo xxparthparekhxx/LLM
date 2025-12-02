@@ -27,6 +27,7 @@ import sys
 from model import LanguageModel, ModelConfig
 from data_utils import TextDataset, create_dataloader, split_dataset
 from tokenizer import SimpleTokenizer, BPETokenizer
+from data_utils import load_text_file, load_directory, StreamingTextDataset
 
 
 class Trainer:
@@ -528,9 +529,8 @@ def main():
         choices=["cuda", "cpu", "tpu"],
         help="Device to use (cuda/cpu/tpu)"
     )
-    parser.add_argument(
-        "--use-wandb", action="store_true", help="Use wandb for logging"
-    )
+    parser.add_argument("--use-wandb", action="store_true", help="Use wandb for logging")
+    parser.add_argument("--tokenizer", type=str, help="Path to pre-trained tokenizer JSON")
 
     args = parser.parse_args()
 
@@ -581,48 +581,119 @@ def main():
             print("Install with: pip install torch_xla")
             return
 
-    # Load data
-    print("Loading data...")
-    from data_utils import load_text_file, load_directory
-
-    if os.path.isfile(args.data):
-        texts = load_text_file(args.data)
-    else:
-        texts = load_directory(args.data)
-
-    print(f"Loaded {len(texts)} texts")
-
-    # Create tokenizer
-    print("Creating tokenizer...")
+    # 1. Initialize Tokenizer (Must be done before dataset creation)
+    print("Initializing tokenizer...")
     tokenizer = SimpleTokenizer()
-    tokenizer.train(texts)
-    print(f"Vocabulary size: {tokenizer.vocab_size}")
     
-    # Save tokenizer
-    tokenizer_path = "tokenizer.json"
-    tokenizer.save(tokenizer_path)
+    if args.tokenizer and os.path.exists(args.tokenizer):
+        print(f"Loading tokenizer from {args.tokenizer}...")
+        tokenizer.load(args.tokenizer)
+        print(f"Vocabulary size: {tokenizer.vocab_size}")
+    else:
+        # Need to train tokenizer
+        print("No pre-trained tokenizer provided. Training from scratch...")
+        
+        # Check if streaming
+        if "/" in args.data and not os.path.exists(args.data):
+             print(f"Training tokenizer on sample from streaming dataset: {args.data}")
+             # Load a small sample to train tokenizer
+             try:
+                 from datasets import load_dataset
+                 # Load just 10k examples for tokenizer training
+                 ds_sample = load_dataset(args.data, split="train", streaming=True).take(10000)
+                 sample_texts = [item["text"] for item in ds_sample if item["text"]]
+                 print(f"Collected {len(sample_texts)} samples for tokenizer training")
+                 tokenizer.train(sample_texts)
+             except Exception as e:
+                 print(f"Error training tokenizer on stream: {e}")
+                 print("Please provide a pre-trained tokenizer with --tokenizer")
+                 return
+        else:
+            # Standard file loading for tokenizer training
+            from data_utils import load_text_file, load_directory
+            if os.path.isfile(args.data):
+                texts = load_text_file(args.data)
+            else:
+                texts = load_directory(args.data)
+            print(f"Loaded {len(texts)} texts for tokenizer training")
+            tokenizer.train(texts)
+            
+        print(f"Vocabulary size: {tokenizer.vocab_size}")
+        
+        # Save tokenizer
+        tokenizer.save("tokenizer.json")
+        ckpt_tokenizer_path = os.path.join(training_config["checkpoint_dir"], "tokenizer.json")
+        tokenizer.save(ckpt_tokenizer_path)
 
-    # Create dataset
-    print("Creating dataset...")
-    dataset = TextDataset(
-        texts,
-        tokenizer,
-        block_size=config["data"]["block_size"],
-        stride=config["data"].get("stride", config["data"]["block_size"]),
+    # 2. Load Data & Create Dataset
+    print("Loading data...")
+    from data_utils import load_text_file, load_directory, StreamingTextDataset
+
+    # Check if args.data is a HuggingFace dataset (contains '/')
+    if "/" in args.data and not os.path.exists(args.data):
+        print(f"Detected HuggingFace dataset: {args.data}")
+        # Create streaming dataset
+        train_dataset = StreamingTextDataset(
+            [args.data], 
+            tokenizer, 
+            block_size=config["data"]["block_size"],
+            split="train"
+        )
+        # For streaming, we can't easily split validation, so we use the same stream or a different split
+        try:
+            val_dataset = StreamingTextDataset(
+                [args.data], 
+                tokenizer, 
+                block_size=config["data"]["block_size"],
+                split="validation" # Try to load validation split
+            )
+        except:
+            print("Warning: No validation split found, using train split for validation (not ideal)")
+            val_dataset = train_dataset
+            
+        dataset = None # Marker that we are using streaming
+    else:
+        # Standard file loading
+        # We already loaded 'texts' above if we trained tokenizer, but let's be safe and reload or reuse
+        # Optimization: Reuse 'texts' if we have them to avoid double loading
+        if 'texts' not in locals():
+            if os.path.isfile(args.data):
+                texts = load_text_file(args.data)
+            else:
+                texts = load_directory(args.data)
+        
+        print(f"Creating dataset with {len(texts)} texts...")
+        dataset = TextDataset(
+            texts,
+            tokenizer,
+            block_size=config["data"]["block_size"],
+            stride=config["data"].get("stride", config["data"]["block_size"]),
+        )
+        train_dataset, val_dataset = split_dataset(dataset, train_ratio=0.9)
+
+    # ... later in create_dataloader ...
+    
+    # Streaming datasets don't support shuffle=True in DataLoader
+    is_streaming = isinstance(train_dataset, StreamingTextDataset)
+    
+    train_loader = create_dataloader(
+        train_dataset,
+        batch_size=config["training"]["batch_size"],
+        shuffle=not is_streaming, # Disable shuffle for streaming (it's internal)
+        num_workers=num_workers,
+        pin_memory=(device == "cuda"),
     )
-
-    train_dataset, val_dataset = split_dataset(dataset, train_ratio=0.9)
-    print(f"Train samples: {len(train_dataset)}")
-    print(f"Val samples: {len(val_dataset)}")
 
     # Create data loaders
     # For TPU, reduce num_workers to avoid issues
     num_workers = 0 if device == "tpu" else 0
     
+    is_streaming = isinstance(train_dataset, StreamingTextDataset)
+
     train_loader = create_dataloader(
         train_dataset,
         batch_size=config["training"]["batch_size"],
-        shuffle=True,
+        shuffle=not is_streaming,
         num_workers=num_workers,
         pin_memory=(device == "cuda"),
     )

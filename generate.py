@@ -28,14 +28,26 @@ def main():
 
     # 1. Load Data & Build Tokenizer
     tokenizer = SimpleTokenizer()
-    tokenizer_path = "tokenizer.json"
     
-    if os.path.exists(tokenizer_path):
+    # Priority 1: Tokenizer in the same directory as the checkpoint
+    ckpt_dir = os.path.dirname(args.checkpoint)
+    ckpt_tokenizer_path = os.path.join(ckpt_dir, "tokenizer.json")
+    
+    # Priority 2: Tokenizer in current directory
+    local_tokenizer_path = "tokenizer.json"
+    
+    tokenizer_path = None
+    if os.path.exists(ckpt_tokenizer_path):
+        tokenizer_path = ckpt_tokenizer_path
+    elif os.path.exists(local_tokenizer_path):
+        tokenizer_path = local_tokenizer_path
+    
+    if tokenizer_path:
         print(f"Loading tokenizer from {tokenizer_path}...")
         tokenizer.load(tokenizer_path)
         print(f"Vocabulary size: {tokenizer.vocab_size}")
     else:
-        print(f"Tokenizer not found at {tokenizer_path}")
+        print(f"Tokenizer not found in {ckpt_dir} or current directory.")
         print(f"Loading data from {args.data} to build tokenizer...")
         if os.path.isfile(args.data):
             texts = load_text_file(args.data)
@@ -46,8 +58,10 @@ def main():
         tokenizer.train(texts)
         print(f"Vocabulary size: {tokenizer.vocab_size}")
         
-        # Save for next time
-        tokenizer.save(tokenizer_path)
+        # Save to checkpoint directory for future use
+        save_path = os.path.join(ckpt_dir, "tokenizer.json")
+        tokenizer.save(save_path)
+        print(f"Saved tokenizer to {save_path}")
 
     # 2. Load Checkpoint & Config
     print(f"Loading checkpoint from {args.checkpoint}...")
@@ -93,7 +107,7 @@ def main():
         print(f"\n⚠️  VOCAB SIZE MISMATCH!")
         print(f"Tokenizer has {tokenizer.vocab_size} tokens, but model expects {checkpoint_vocab_size}.")
         
-        if os.path.exists(tokenizer_path):
+        if tokenizer_path:
             print(f"The existing {tokenizer_path} might be stale or built from different data.")
             print("Attempting to rebuild tokenizer from provided data...")
             
@@ -108,8 +122,9 @@ def main():
             tokenizer.train(texts)
             print(f"New vocabulary size: {tokenizer.vocab_size}")
             
-            # Save the correct one
-            tokenizer.save(tokenizer_path)
+            # Save the correct one to checkpoint dir
+            save_path = os.path.join(ckpt_dir, "tokenizer.json")
+            tokenizer.save(save_path)
             
             if tokenizer.vocab_size != checkpoint_vocab_size:
                 print(f"❌ Error: Rebuilt tokenizer still has {tokenizer.vocab_size} tokens, expected {checkpoint_vocab_size}.")
@@ -146,14 +161,20 @@ def main():
                 x, 
                 max_new_tokens=args.max_new_tokens, 
                 temperature=args.temperature, 
-                top_k=args.top_k
+                top_k=args.top_k,
+                stop_token=tokenizer.eos_token_id  # Stop at EOS
             )
         
         # Decode
+        # Strip special tokens like <pad>, <bos>, <eos>
         generated_text = tokenizer.decode(output_ids[0].tolist())
         
+        # Clean up special tokens if they leaked
+        for special in tokenizer.special_tokens.keys():
+            generated_text = generated_text.replace(special, "")
+        
         print(f"Sample {i+1}:")
-        print(generated_text)
+        print(generated_text.strip())
         print("-" * 50)
 
 if __name__ == "__main__":
