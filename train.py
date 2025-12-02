@@ -599,8 +599,17 @@ def main():
              # Load a small sample to train tokenizer
              try:
                  from datasets import load_dataset
-                 # Load just 10k examples for tokenizer training
-                 ds_sample = load_dataset(args.data, split="train", streaming=True).take(10000)
+                 
+                 # Handle subsets like "HuggingFaceFW/fineweb-edu/sample-10BT"
+                 if "/" in args.data and len(args.data.split("/")) > 2:
+                     parts = args.data.split("/")
+                     repo = "/".join(parts[:2])
+                     subset = "/".join(parts[2:])
+                     print(f"Loading dataset: {repo}, subset: {subset}")
+                     ds_sample = load_dataset(repo, subset, split="train", streaming=True).take(10000)
+                 else:
+                     ds_sample = load_dataset(args.data, split="train", streaming=True).take(10000)
+                     
                  sample_texts = [item["text"] for item in ds_sample if item["text"]]
                  print(f"Collected {len(sample_texts)} samples for tokenizer training")
                  tokenizer.train(sample_texts)
