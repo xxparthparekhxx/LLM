@@ -587,7 +587,7 @@ def main():
                 "n_layers": 24,  # Keep depth
                 "n_heads": 16,  # Standard head count
                 "n_kv_heads": 4,  # GQA 4x for efficiency
-                "n_embd": 1308,  # Reduced from 1536 (~700M params)
+                "n_embd": 1408,  # Reduced from 1536 (~700M params)
                 "dropout": 0.1,
                 "use_gradient_checkpointing": True,  # CRITICAL for memory
             },
