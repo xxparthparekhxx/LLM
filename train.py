@@ -212,7 +212,7 @@ class Trainer:
                         logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
                 else:
                     # CUDA: use standard autocast
-                    with cuda_autocast():
+                    with cuda_autocast("cuda"):
                         logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
                         
                 loss = loss / self.config.get("gradient_accumulation_steps", 1)
