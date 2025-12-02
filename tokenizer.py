@@ -249,7 +249,12 @@ class BPETokenizer:
                 
             # HF saves merges in 'model' -> 'merges'
             if 'model' in data and 'merges' in data['model']:
-                self.merges = [tuple(m.split(' ')) for m in data['model']['merges']]
+                self.merges = []
+                for m in data['model']['merges']:
+                    if isinstance(m, str):
+                        self.merges.append(tuple(m.split(' ')))
+                    else:
+                        self.merges.append(tuple(m))
             
             # Clean up
             try:
