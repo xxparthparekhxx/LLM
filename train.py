@@ -684,7 +684,9 @@ def main():
         )
         train_dataset, val_dataset = split_dataset(dataset, train_ratio=0.9)
 
-    # ... later in create_dataloader ...
+    # Create data loaders
+    # For TPU, reduce num_workers to avoid issues
+    num_workers = 0 if device == "tpu" else 2
     
     # Streaming datasets don't support shuffle=True in DataLoader
     is_streaming = isinstance(train_dataset, StreamingTextDataset)
@@ -696,20 +698,8 @@ def main():
         num_workers=num_workers,
         pin_memory=(device == "cuda"),
     )
-
-    # Create data loaders
-    # For TPU, reduce num_workers to avoid issues
-    num_workers = 0 if device == "tpu" else 0
     
-    is_streaming = isinstance(train_dataset, StreamingTextDataset)
 
-    train_loader = create_dataloader(
-        train_dataset,
-        batch_size=config["training"]["batch_size"],
-        shuffle=not is_streaming,
-        num_workers=num_workers,
-        pin_memory=(device == "cuda"),
-    )
 
     val_loader = create_dataloader(
         val_dataset,

@@ -112,7 +112,24 @@ def main():
             print("Attempting to rebuild tokenizer from provided data...")
             
             # Force rebuild
-            if os.path.isfile(args.data):
+            if "/" in args.data and not os.path.exists(args.data):
+                print(f"Rebuilding tokenizer from streaming dataset: {args.data}")
+                try:
+                    from datasets import load_dataset
+                    # Handle subsets
+                    if "/" in args.data and len(args.data.split("/")) > 2:
+                        parts = args.data.split("/")
+                        repo = "/".join(parts[:2])
+                        subset = "/".join(parts[2:])
+                        ds_sample = load_dataset(repo, subset, split="train", streaming=True).take(10000)
+                    else:
+                        ds_sample = load_dataset(args.data, split="train", streaming=True).take(10000)
+                        
+                    texts = [item["text"] for item in ds_sample if item["text"]]
+                except Exception as e:
+                    print(f"Error loading streaming dataset: {e}")
+                    return
+            elif os.path.isfile(args.data):
                 texts = load_text_file(args.data)
             else:
                 texts = load_directory(args.data)
