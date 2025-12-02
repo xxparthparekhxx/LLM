@@ -5,7 +5,7 @@
         "n_layers": 24,
         "n_heads": 16,
         "n_kv_heads": 4,
-        "n_embd": 1248,
+        "n_embd": 1088,
         "dropout": 0.1,
         "bias": false,
         "use_rope": true,

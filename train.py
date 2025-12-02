@@ -734,7 +734,7 @@ def main():
 
     # Create data loaders
     # For TPU, reduce num_workers to avoid issues
-    num_workers = 0 if device == "tpu" else 0
+    num_workers = 0 if device == "tpu" else 2
     
     # Streaming datasets don't support shuffle=True in DataLoader
     is_streaming = isinstance(train_dataset, StreamingTextDataset)
