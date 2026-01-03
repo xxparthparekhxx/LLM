@@ -708,7 +708,9 @@ def main():
                  return
         else:
             # Standard file loading for tokenizer training
-            from data_utils import load_text_file, load_directory
+            pass
+            
+        from data_utils import load_text_file, load_directory
         if os.path.isfile(args.data):
             # Optimization: If file is large (>100MB), sample it for tokenizer training
             file_size = os.path.getsize(args.data)
