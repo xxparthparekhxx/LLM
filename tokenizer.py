@@ -195,7 +195,13 @@ class BPETokenizer:
                 # Format: "token1 token2" per line
                 merges_file.write("#version: 0.2\n") # Optional version
                 for p in self.merges:
-                    merges_file.write(f"{p[0]} {p[1]}\n")
+                    # Ensure tuple is converted to space-separated string
+                    # ByteLevelBPETokenizer expects "u g" not "('u', 'g')"
+                    if isinstance(p, (list, tuple)):
+                        s = f"{p[0]} {p[1]}"
+                    else:
+                        s = str(p)
+                    merges_file.write(f"{s}\n")
                 merges_path = merges_file.name
             
             # Load
