@@ -304,6 +304,13 @@ class Trainer:
                         }
                     )
                 
+                # Hourly checkpoint saving
+                current_time = time.time()
+                if current_time - self.last_checkpoint_time >= 3600:  # 1 hour
+                    print(f"\n⏰ Hourly checkpoint at batch {batch_idx}")
+                    self.save_checkpoint(is_best=False, reason="hourly")
+                    self.last_checkpoint_time = current_time
+
                 # Start timing next data load
                 self.profiler.start("Data Loading")
 
@@ -330,12 +337,7 @@ class Trainer:
                     }
                 )
             
-            # Hourly checkpoint saving (for Colab)
-            current_time = time.time()
-            if current_time - self.last_checkpoint_time >= 3600:  # 1 hour
-                print(f"\n⏰ Hourly checkpoint at batch {batch_idx}/{total_batches}")
-                self.save_checkpoint(is_best=False, reason="hourly")
-                self.last_checkpoint_time = current_time
+
 
         # Reset batch counter at end of epoch
         self.current_batch = 0
@@ -709,30 +711,28 @@ def main():
                  return
         else:
             # Standard file loading for tokenizer training
-            pass
-            
-        from data_utils import load_text_file, load_directory
-        if os.path.isfile(args.data):
-            # Optimization: If file is large (>100MB), sample it for tokenizer training
-            file_size = os.path.getsize(args.data)
-            if file_size > 100 * 1024 * 1024:  # 100MB
-                print(f"File is large ({file_size / 1024 / 1024:.2f} MB). Sampling for tokenizer training...")
-                with open(args.data, 'r', encoding='utf-8') as f:
-                    # Read first 10MB or 50k lines
-                    sample_lines = []
-                    for _ in range(50000):
-                        line = f.readline()
-                        if not line: break
-                        sample_lines.append(line)
-                texts = sample_lines
-                print(f"Sampled {len(texts)} lines for tokenizer training")
+            from data_utils import load_text_file, load_directory
+            if os.path.isfile(args.data):
+                # Optimization: If file is large (>100MB), sample it for tokenizer training
+                file_size = os.path.getsize(args.data)
+                if file_size > 100 * 1024 * 1024:  # 100MB
+                    print(f"File is large ({file_size / 1024 / 1024:.2f} MB). Sampling for tokenizer training...")
+                    with open(args.data, 'r', encoding='utf-8') as f:
+                        # Read first 10MB or 50k lines
+                        sample_lines = []
+                        for _ in range(50000):
+                            line = f.readline()
+                            if not line: break
+                            sample_lines.append(line)
+                    texts = sample_lines
+                    print(f"Sampled {len(texts)} lines for tokenizer training")
+                else:
+                    texts = load_text_file(args.data)
             else:
-                texts = load_text_file(args.data)
-        else:
-            texts = load_directory(args.data)
-        
-        if hasattr(tokenizer, 'train'):
-             tokenizer.train(texts)
+                texts = load_directory(args.data)
+            
+            if hasattr(tokenizer, 'train'):
+                 tokenizer.train(texts)
             
         print(f"Vocabulary size: {tokenizer.vocab_size}")
         
