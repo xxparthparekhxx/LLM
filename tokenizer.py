@@ -198,18 +198,19 @@ class BPETokenizer:
                 # Actually ByteLevelBPETokenizer expects specific format.
                 # Let's try to just use the vocab and merges we have.
                 # Format: "token1 token2" per line
-                merges_file.write("#version: 0.2\n") # Optional version
+                merges_file.write("#version: 0.2\n") 
                 for p in self.merges:
-                    # Ensure tuple is converted to space-separated string
-                    # ByteLevelBPETokenizer expects "u g" not "('u', 'g')"
-                    if isinstance(p, (list, tuple)):
-                        s = f"{p[0]} {p[1]}"
-                    else:
-                        s = str(p)
-                    merges_file.write(f"{s}\n")
+                    # Robust handle of tuple vs list vs string
+                    if isinstance(p, str):
+                        # If somehow it's a string "a b", write it directly
+                        merges_file.write(f"{p}\n")
+                    elif isinstance(p, (list, tuple)):
+                        merges_file.write(f"{p[0]} {p[1]}\n")
+                        
                 merges_path = merges_file.name
             
             # Load
+            from tokenizers import ByteLevelBPETokenizer
             self.hf_tokenizer = ByteLevelBPETokenizer(
                 vocab=vocab_path,
                 merges=merges_path,
