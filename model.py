@@ -357,7 +357,7 @@ class LanguageModel(nn.Module):
             self.lm_head.weight = self.token_embedding.weight
         
         # Gradient checkpointing
-        self.gradient_checkpointing = False
+        self.gradient_checkpointing = getattr(config, "use_gradient_checkpointing", False)
         
         # Initialize weights
         self.apply(self._init_weights)
