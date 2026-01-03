@@ -167,6 +167,7 @@ class BPETokenizer:
 
     def load(self, filepath: str):
         """Load tokenizer vocabulary from file"""
+        print(f"DEBUG: tokenizer.load called with {filepath}")
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
@@ -175,8 +176,12 @@ class BPETokenizer:
         # Handle merges if present
         if 'merges' in data:
             self.merges = [tuple(m) for m in data['merges']]
+            print(f"DEBUG: Loaded {len(self.merges)} merges")
+        else:
+            print("DEBUG: No merges found in json")
             
         self.inverse_vocab = {int(v): k for k, v in self.vocab.items()}
+        print("DEBUG: Reconstructing HF tokenizer...")
         
         # Try to reconstruct HF tokenizer for fast encoding
         try:
@@ -211,6 +216,7 @@ class BPETokenizer:
                 add_prefix_space=self.add_prefix_space,
                 lowercase=self.lowercase
             )
+            print("INFO: Successfully enabled fast HF encoding.")
             
             # Clean up
             try:
