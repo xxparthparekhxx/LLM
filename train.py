@@ -805,6 +805,7 @@ def main():
         # We already loaded 'texts' above if we trained tokenizer, but let's be safe and reload or reuse
         # Optimization: Reuse 'texts' if we have them to avoid double loading
         if 'texts' not in locals():
+            from data_utils import load_text_file, load_directory  # Ensure imports are available
             if os.path.isfile(args.data):
                 texts = load_text_file(args.data)
             else:
