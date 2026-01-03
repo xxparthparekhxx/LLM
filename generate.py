@@ -8,11 +8,12 @@ from pathlib import Path
 from model import LanguageModel, ModelConfig
 from tokenizer import BPETokenizer
 from data_utils import load_text_file, load_directory
-
+import json 
 def main():
     parser = argparse.ArgumentParser(description="Generate text from trained model")
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to checkpoint file")
-    parser.add_argument("--data", type=str, required=True, help="Path to training data (to build tokenizer)")
+    parser.add_argument("--tokenizer", type=str, help="Path to tokenizer.json file")
+    parser.add_argument("--data", type=str, required=True, help="Path to training data (fallback to build tokenizer)")
     parser.add_argument("--prompt", type=str, default="Once upon a time", help="Start of the text")
     parser.add_argument("--num_samples", type=int, default=3, help="Number of samples to generate")
     parser.add_argument("--max_new_tokens", type=int, default=200, help="Length of generation")
@@ -29,15 +30,18 @@ def main():
     # 1. Load Data & Build Tokenizer
     tokenizer = BPETokenizer()
     
-    # Priority 1: Tokenizer in the same directory as the checkpoint
+    # Priority 1: Explicit argument
+    # Priority 2: Tokenizer in the same directory as the checkpoint
+    # Priority 3: Tokenizer in current directory
+    
     ckpt_dir = os.path.dirname(args.checkpoint)
     ckpt_tokenizer_path = os.path.join(ckpt_dir, "tokenizer.json")
-    
-    # Priority 2: Tokenizer in current directory
     local_tokenizer_path = "tokenizer.json"
     
     tokenizer_path = None
-    if os.path.exists(ckpt_tokenizer_path):
+    if args.tokenizer and os.path.exists(args.tokenizer):
+        tokenizer_path = args.tokenizer
+    elif os.path.exists(ckpt_tokenizer_path):
         tokenizer_path = ckpt_tokenizer_path
     elif os.path.exists(local_tokenizer_path):
         tokenizer_path = local_tokenizer_path
@@ -95,8 +99,11 @@ def main():
                 "n_kv_heads": 4,
                 "n_embd": 1408,
                 "dropout": 0.1,
+                "dropout": 0.1,
                 "use_gradient_checkpointing": True,
             }
+            
+    print(f"DEBUG: Model Config: model_config_dict")
 
     # 3. Initialize Model
     print("Initializing model...")
@@ -135,7 +142,8 @@ def main():
                 texts = load_directory(args.data)
             
             print(f"Loaded {len(texts)} texts. Rebuilding tokenizer...")
-            tokenizer = BPETokenizer()
+            # Initialize with the CORRECT vocab size from the model
+            tokenizer = BPETokenizer(vocab_size=checkpoint_vocab_size)
             tokenizer.train(texts)
             print(f"New vocabulary size: {tokenizer.vocab_size}")
             

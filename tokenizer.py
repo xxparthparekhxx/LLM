@@ -174,6 +174,7 @@ class BPETokenizer:
             data = json.load(f)
         
         self.vocab = data['vocab']
+        self.vocab_size = len(self.vocab)
         self.special_tokens = data['special_tokens']
         # Handle merges if present
         if 'merges' in data:
@@ -454,7 +455,7 @@ class BPETokenizer:
             
             # Save to a temporary file to extract everything cleanly
             import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".json", encoding='utf-8') as tmp:
                 hf_tokenizer.save(tmp.name)
                 tmp_path = tmp.name
             
