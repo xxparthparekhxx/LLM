@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from torch.cuda.amp import GradScaler, autocast as cuda_autocast
 import os
 # Disable tokenizers parallelism to avoid deadlocks in forked processes
-# os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import torch
 import torch.nn as nn

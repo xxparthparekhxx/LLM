@@ -1,33 +1,30 @@
 {
     "model": {
         "vocab_size": 50257,
-        "context_length": 4096,
-        "n_layers": 24,
-        "n_heads": 24,
-        "n_kv_heads": 4,
-        "n_embd": 1536,
+        "context_length": 2048,
+        "n_embd": 2048,
+        "n_layers": 22,
+        "n_heads": 32,
+        "n_kv_heads": 8,
         "dropout": 0.0,
-        "bias": false,
-        "use_rope": true,
-        "use_rmsnorm": true,
-        "use_swiglu": true,
-        "flash_attention": true,
+        "use_bias": false,
         "use_gradient_checkpointing": true
     },
     "training": {
-        "batch_size": 1,
-        "gradient_accumulation_steps": 64,
-        "max_epochs": 3,
+        "batch_size": 16,
+        "gradient_accumulation_steps": 4,
         "learning_rate": 3e-4,
         "weight_decay": 0.1,
         "max_grad_norm": 1.0,
-        "use_amp": true,
-        "early_stop_patience": 5,
+        "max_epochs": 3,
+        "warmup_steps": 100,
         "save_interval": 1000,
+        "use_amp": true,
         "checkpoint_dir": "checkpoints_1B"
     },
     "data": {
-        "block_size": 4096,
-        "stride": 2048
+        "block_size": 2048,
+        "stride": 1024,
+        "max_samples": null
     }
 }

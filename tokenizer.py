@@ -455,7 +455,7 @@ class BPETokenizer:
             
             # Save to a temporary file to extract everything cleanly
             import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".json", encoding='utf-8') as tmp:
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".json", encoding='utf-8') as tmp:
                 hf_tokenizer.save(tmp.name)
                 tmp_path = tmp.name
             
