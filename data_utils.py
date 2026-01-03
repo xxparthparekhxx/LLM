@@ -10,6 +10,7 @@ import os
 import json
 from pathlib import Path
 import numpy as np
+from tqdm import tqdm
 
 try:
     from datasets import load_dataset, interleave_datasets, IterableDataset as HFIterableDataset
@@ -99,11 +100,29 @@ class TextDataset(Dataset):
             # Old behavior: tokenize everything upfront (SLOW for large datasets)
             print("Tokenizing all texts (this may take a while)...")
             self.tokens = []
-            for i, text in enumerate(texts):
-                if i % 1000 == 0:
-                    print(f"  Tokenized {i}/{len(texts)} texts...")
-                tokens = tokenizer.encode(text)
-                self.tokens.extend(tokens)
+            # Batch encoding for much faster processing
+            batch_size = 1000
+            # Use tqdm for progress bar
+            for i in tqdm(range(0, len(texts), batch_size), desc="Tokenizing"):
+                batch_texts = texts[i:i + batch_size]
+                
+                if hasattr(tokenizer, 'encode_batch'):
+                    # Use fast batch encoding
+                    # encode_batch returns list of Encoding objects (hf) or lists (fallback)
+                    # We need the IDs
+                    batch_encoded = tokenizer.encode_batch(batch_texts)
+                    for encoded in batch_encoded:
+                        # If it's a HF Encoding object, it has .ids
+                        if hasattr(encoded, 'ids'):
+                            self.tokens.extend(list(encoded.ids))
+                        else:
+                            # Fallback if it returned list of lists
+                            self.tokens.extend(encoded)
+                else:
+                    # Fallback to slow loop
+                    for text in batch_texts:
+                        tokens = tokenizer.encode(text)
+                        self.tokens.extend(tokens)
             
             # Create sequences with sliding window
             self.sequences = []

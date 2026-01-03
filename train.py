@@ -58,9 +58,11 @@ class Trainer:
         config: Dict[str, Any],
         device: str = "cuda",
         use_wandb: bool = False,
+        enable_profiling: bool = False,
     ):
         self.config = config
         self.use_wandb = use_wandb
+        self.enable_profiling = enable_profiling
         
         # Detect if using TPU
         self.is_tpu = device == "tpu"
@@ -189,7 +191,7 @@ class Trainer:
                 
             # Create iterator and skip ahead
             train_iter = iter(train_loader)
-            for _ in range(self.current_batch):
+            for _ in tqdm(range(self.current_batch), desc="Skipping batches"):
                 try:
                     next(train_iter)
                 except StopIteration:
@@ -208,7 +210,7 @@ class Trainer:
         )
 
         # Live display context
-        live_ctx = Live(self.profiler.generate_table(), refresh_per_second=4) if RICH_AVAILABLE else None
+        live_ctx = Live(self.profiler.generate_table(), refresh_per_second=4) if (RICH_AVAILABLE and self.enable_profiling) else None
         
         if live_ctx:
             live_ctx.start()
@@ -370,7 +372,7 @@ class Trainer:
                     with torch.autocast(device_type='xla', dtype=torch.bfloat16):
                         _, loss, _ = self.model(x, y)  # Ignore logits and KV cache
                 else:
-                    with cuda_autocast():
+                    with cuda_autocast("cuda"):
                         _, loss, _ = self.model(x, y)  # Ignore logits and KV cache
             else:
                 _, loss, _ = self.model(x, y)  # Ignore logits and KV cache
@@ -609,6 +611,7 @@ def main():
     parser.add_argument("--use-wandb", action="store_true", help="Use wandb for logging")
     parser.add_argument("--tokenizer", type=str, help="Path to pre-trained tokenizer JSON")
     parser.add_argument("--stream", action="store_true", help="Use streaming mode (slower, for massive datasets)")
+    parser.add_argument("--profile", action="store_true", help="Enable rich profiling output")
 
     args = parser.parse_args()
 
@@ -706,12 +709,27 @@ def main():
         else:
             # Standard file loading for tokenizer training
             from data_utils import load_text_file, load_directory
-            if os.path.isfile(args.data):
-                texts = load_text_file(args.data)
+        if os.path.isfile(args.data):
+            # Optimization: If file is large (>100MB), sample it for tokenizer training
+            file_size = os.path.getsize(args.data)
+            if file_size > 100 * 1024 * 1024:  # 100MB
+                print(f"File is large ({file_size / 1024 / 1024:.2f} MB). Sampling for tokenizer training...")
+                with open(args.data, 'r', encoding='utf-8') as f:
+                    # Read first 10MB or 50k lines
+                    sample_lines = []
+                    for _ in range(50000):
+                        line = f.readline()
+                        if not line: break
+                        sample_lines.append(line)
+                texts = sample_lines
+                print(f"Sampled {len(texts)} lines for tokenizer training")
             else:
-                texts = load_directory(args.data)
-            print(f"Loaded {len(texts)} texts for tokenizer training")
-            tokenizer.train(texts)
+                texts = load_text_file(args.data)
+        else:
+            texts = load_directory(args.data)
+        
+        if hasattr(tokenizer, 'train'):
+             tokenizer.train(texts)
             
         print(f"Vocabulary size: {tokenizer.vocab_size}")
         
@@ -761,7 +779,7 @@ def main():
                 tokenizer,
                 block_size=config["data"]["block_size"],
                 split="train",
-                max_samples=None  # Use all samples
+                max_samples=config["data"].get("max_samples", None)  # Use config limit or all samples
             )
             # Try to load validation split
             try:
@@ -770,7 +788,7 @@ def main():
                     tokenizer,
                     block_size=config["data"]["block_size"],
                     split="validation",
-                    max_samples=10000  # Limit val set size
+                    max_samples=min(10000, config["data"].get("max_samples", 10000))  # Limit val set size
                 )
             except:
                 print("Warning: No validation split found, using train split for validation (not ideal)")
@@ -798,6 +816,7 @@ def main():
             tokenizer,
             block_size=config["data"]["block_size"],
             stride=config["data"].get("stride", config["data"]["block_size"]),
+            lazy=False,  # Optimization: Pre-tokenize everything for speed since we fit in RAM
         )
         train_dataset, val_dataset = split_dataset(dataset, train_ratio=0.9)
 
@@ -806,7 +825,12 @@ def main():
     num_workers = 0 if device == "tpu" else 1
     
     # Streaming datasets don't support shuffle=True in DataLoader
-    is_streaming = isinstance(train_dataset, StreamingTextDataset)
+    # Safe check for streaming dataset type
+    try:
+        from data_utils_optimized import StreamingTextDataset
+        is_streaming = isinstance(train_dataset, StreamingTextDataset)
+    except ImportError:
+        is_streaming = False
     
     train_loader = create_dataloader(
         train_dataset,
@@ -834,7 +858,6 @@ def main():
     # Create trainer
     training_config = {
         **config["training"],
-        "checkpoint_dir": "checkpoints",
         "wandb_project": "llm-training",
         "run_name": f'train_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
         "model": config["model"],
@@ -848,6 +871,7 @@ def main():
         training_config,
         device=device,
         use_wandb=args.use_wandb,
+        enable_profiling=args.profile,
     )
 
     # Resume from checkpoint if specified

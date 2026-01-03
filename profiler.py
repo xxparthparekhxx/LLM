@@ -70,7 +70,7 @@ class TrainingProfiler:
         for name, data in stats.items():
             print(f"{name:<20}: {data['current']:.2f}ms (Avg: {data['avg']:.2f}ms)")
 
-    def generate_table(self) -> Table:
+    def generate_table(self) -> "Table":
         """Generate a rich table with stats"""
         if not RICH_AVAILABLE:
             return None

@@ -424,6 +424,9 @@ class BPETokenizer:
             if verbose:
                 print("Syncing vocabulary...")
                 
+            # KEEP THE HF TOKENIZER FOR FAST ENCODING
+            self.hf_tokenizer = hf_tokenizer
+
             # Get vocab
             self.vocab = hf_tokenizer.get_vocab()
             self.inverse_vocab = {v: k for k, v in self.vocab.items()}

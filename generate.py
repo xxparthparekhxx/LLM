@@ -135,7 +135,7 @@ def main():
                 texts = load_directory(args.data)
             
             print(f"Loaded {len(texts)} texts. Rebuilding tokenizer...")
-            tokenizer = SimpleTokenizer()
+            tokenizer = BPETokenizer()
             tokenizer.train(texts)
             print(f"New vocabulary size: {tokenizer.vocab_size}")
             
@@ -169,7 +169,14 @@ def main():
 
     for i in range(args.num_samples):
         # Encode prompt
-        input_ids = tokenizer.encode(args.prompt)
+        # IMPORTANT: Use add_special_tokens=False to avoid adding EOS at the end
+        # We want the model to CONTINUE the prompt, not think it's finished
+        input_ids = tokenizer.encode(args.prompt, add_special_tokens=False)
+        
+        # Manually add BOS token if it exists
+        if hasattr(tokenizer, 'bos_token_id'):
+            input_ids = [tokenizer.bos_token_id] + input_ids
+            
         x = torch.tensor([input_ids], dtype=torch.long, device=device)
 
         # Generate
