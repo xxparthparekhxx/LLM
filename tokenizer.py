@@ -698,6 +698,9 @@ class BPETokenizer:
             return batch_ids
         
         # Fallback to slow loop
+        if not hasattr(self, '_warned_slow'):
+            print("WARNING: Fast tokenizer not available. Using slow Python loop (this will be slow!).")
+            self._warned_slow = True
         return [self.encode(text, add_special_tokens) for text in texts]
     
     def decode(self, token_ids: List[int], skip_special_tokens: bool = True) -> str:
