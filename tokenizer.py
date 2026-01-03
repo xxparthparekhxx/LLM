@@ -169,7 +169,7 @@ class BPETokenizer:
 
     def load(self, filepath: str):
         """Load tokenizer vocabulary from file"""
-        print(f"DEBUG: tokenizer.load called with {filepath}")
+        # print(f"DEBUG: tokenizer.load called with {filepath}")
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
@@ -191,11 +191,11 @@ class BPETokenizer:
             import tempfile
             
             # Create temp files for vocab and merges
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".json") as vocab_file:
-                json.dump(self.vocab, vocab_file)
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".json", encoding='utf-8') as vocab_file:
+                json.dump(self.vocab, vocab_file, ensure_ascii=False)
                 vocab_path = vocab_file.name
                 
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".txt") as merges_file:
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".txt", encoding='utf-8') as merges_file:
                 # HF expects merges.txt to have a version line first? No, just merges.
                 # Actually ByteLevelBPETokenizer expects specific format.
                 # Let's try to just use the vocab and merges we have.
@@ -685,6 +685,7 @@ class BPETokenizer:
         Returns:
             List of lists of token ids
         """
+        # print("DEBUG: Using encode_batch", self.hf_tokenizer)
         if self.hf_tokenizer:
             # Fast path using HuggingFace tokenizer
             encoded_batch = self.hf_tokenizer.encode_batch(texts)
@@ -785,27 +786,7 @@ class BPETokenizer:
         
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-    
-    def load(self, filepath: str):
-        """Load tokenizer from file"""
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        self.vocab = {k: int(v) for k, v in data['vocab'].items()}
-        self.merges = [tuple(m) for m in data['merges']]
-        self.vocab_size = data['vocab_size']
-        self.special_tokens = {k: int(v) for k, v in data['special_tokens'].items()}
-        self.normalization = data.get('normalization', 'NFD')
-        self.lowercase = data.get('lowercase', False)
-        self.add_prefix_space = data.get('add_prefix_space', False)
-        self.byte_to_unicode = {int(k): v for k, v in data['byte_to_unicode'].items()}
-        self.unicode_to_byte = {v: k for k, v in self.byte_to_unicode.items()}
-        self.inverse_vocab = {v: k for k, v in self.vocab.items()}
-        
-        # Rebuild special tokens set
-        self.special_tokens_set = set(self.special_tokens.keys())
-        self.special_tokens_reverse = {v: k for k, v in self.special_tokens.items()}
-    
+
     @property
     def pad_token_id(self) -> int:
         return self.special_tokens.get('<pad>', 0)
