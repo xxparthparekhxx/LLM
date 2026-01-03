@@ -233,8 +233,9 @@ class Trainer:
                         with torch.autocast(device_type='xla', dtype=torch.bfloat16):
                             logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
                     else:
-                        # CUDA: use standard autocast
-                        with cuda_autocast("cuda"):
+                        # CUDA: use standard autocast, preferring bfloat16 if available (Ampere+)
+                        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+                        with cuda_autocast("cuda", dtype=dtype):
                             logits, loss, _ = self.model(x, y)  # Ignore KV cache during training
                             
                     loss = loss / self.config.get("gradient_accumulation_steps", 1)
