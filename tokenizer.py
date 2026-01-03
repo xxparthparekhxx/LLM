@@ -15,6 +15,8 @@ import json
 import unicodedata
 from collections import defaultdict, Counter
 from typing import List, Dict, Tuple, Optional, Set
+
+print("DEBUG: Importing tokenizer module...")
 from heapq import heappush, heappop
 import os
 
@@ -227,8 +229,9 @@ class BPETokenizer:
                 pass
                 
         except Exception as e:
-            print(f"Warning: Could not enable fast encoding: {e}")
-            self.hf_tokenizer = None
+            # RAISE ERROR to see why it fails
+            raise RuntimeError(f"CRITICAL: Fast Tokenizer Init Failed! Error: {e}")
+            # self.hf_tokenizer = None
 
     def encode(self, text: str, add_special_tokens: bool = True) -> List[int]:
         """Encode text to token ids"""
