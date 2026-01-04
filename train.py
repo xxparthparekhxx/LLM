@@ -870,6 +870,10 @@ def main():
     model_config = ModelConfig(**config["model"])
     model = LanguageModel(model_config)
 
+    # Pass finetune flag to config
+    if args.finetune:
+        config["training"]["finetune"] = True
+
     # Create trainer
     training_config = {
         **config["training"],
