@@ -110,7 +110,6 @@ class Trainer:
             self.scaler = None
         else:
             self.use_amp = self.use_amp and self.device == "cuda"
-            # Initialize GradScaler with 'cuda' device if using new API, or default for old
             if self.use_amp:
                 try:
                     self.scaler = GradScaler('cuda')
@@ -460,16 +459,27 @@ class Trainer:
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
 
         self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-        self.current_epoch = checkpoint["epoch"]
-        self.current_batch = checkpoint.get("batch", 0)  # Resume from exact batch
-        self.global_step = checkpoint["global_step"]
-        self.best_val_loss = checkpoint.get("best_val_loss", float("inf"))
-        self.patience_counter = checkpoint.get("patience_counter", 0)
+        
+        # Check if fine-tuning (reset state)
+        if self.config.get("finetune", False):
+            print("Fine-tuning mode: Re-initializing optimizer, scheduler, and step counters.")
+            self.current_epoch = 0
+            self.current_batch = 0
+            self.global_step = 0
+            self.best_val_loss = float("inf")
+            self.patience_counter = 0
+            # Do NOT load optimizer/scheduler/scaler states
+        else:
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            self.current_epoch = checkpoint["epoch"]
+            self.current_batch = checkpoint.get("batch", 0)  # Resume from exact batch
+            self.global_step = checkpoint["global_step"]
+            self.best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+            self.patience_counter = checkpoint.get("patience_counter", 0)
 
-        if self.scaler is not None and "scaler_state_dict" in checkpoint:
-            self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
+            if self.scaler is not None and "scaler_state_dict" in checkpoint:
+                self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
         
         # Try to infer epoch/batch from filename if they seem wrong (e.g. 0)
         # This helps if the user renamed the file or if saving logic had a bug
@@ -615,6 +625,7 @@ def main():
     parser.add_argument("--tokenizer", type=str, help="Path to pre-trained tokenizer JSON")
     parser.add_argument("--stream", action="store_true", help="Use streaming mode (slower, for massive datasets)")
     parser.add_argument("--profile", action="store_true", help="Enable rich profiling output")
+    parser.add_argument("--finetune", action="store_true", help="Reset training state (epoch, batch, optimizer) for fine-tuning")
 
     args = parser.parse_args()
 
