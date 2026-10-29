@@ -1,4 +1,9 @@
 .venv
-data
-checkpoints
+__pycache__/
+*.pyc
+data/
+runs/
+checkpoints/
 .cache
+.pytest_cache/
+logs/

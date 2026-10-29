@@ -1,0 +1,31 @@
+{
+  "model": {
+    "vocab_size": 50304,
+    "context_length": 1024,
+    "n_layers": 12,
+    "d_model": 768,
+    "n_heads": 12,
+    "head_dim": 64,
+    "n_kv_heads": 4,
+    "ffn_dim": 2048,
+    "swiglu_clamp": null
+  },
+  "train": {
+    "block_size": 1024,
+    "micro_batch_size": 32,
+    "tokens_per_step": 524288,
+    "total_tokens": 2500000000,
+    "compile": true,
+    "ce_chunk": null,
+    "muon_lr": 0.02,
+    "embed_lr": 0.003,
+    "adam_lr": 0.003,
+    "warmup_steps": 200,
+    "schedule": "wsd",
+    "decay_frac": 0.25,
+    "eval_interval": 250,
+    "eval_tokens": 5000000,
+    "sample_prompt": "The most important thing to know about the ocean is",
+    "checkpoint_minutes": 15
+  }
+}

@@ -1,5 +1,0 @@
-torch>=2.0.0
-datasets
-tqdm>=4.65.0
-bitsandbytes
-wandb

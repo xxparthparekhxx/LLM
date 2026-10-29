@@ -1,0 +1,31 @@
+{
+  "model": {
+    "vocab_size": 50304,
+    "context_length": 512,
+    "n_layers": 8,
+    "d_model": 384,
+    "n_heads": 6,
+    "head_dim": 64,
+    "n_kv_heads": 2,
+    "ffn_dim": 1024,
+    "swiglu_clamp": null,
+    "doc_masking": false
+  },
+  "train": {
+    "block_size": 512,
+    "micro_batch_size": 8,
+    "tokens_per_step": 65536,
+    "total_tokens": null,
+    "ce_chunk": 512,
+    "muon_lr": 0.02,
+    "embed_lr": 0.003,
+    "adam_lr": 0.003,
+    "warmup_steps": 200,
+    "schedule": "wsd",
+    "decay_frac": 0.2,
+    "eval_interval": 250,
+    "eval_tokens": 1000000,
+    "sample_prompt": "Once upon a time",
+    "checkpoint_minutes": 15
+  }
+}

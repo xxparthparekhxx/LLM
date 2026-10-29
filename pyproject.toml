@@ -1,0 +1,22 @@
+[project]
+name = "llm"
+version = "2.0.0"
+description = "A small decoder-only LLM built from scratch, with Muon and DeepSeek-style architecture options"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.5",
+    "numpy",
+    "tiktoken",
+    "datasets",
+    "tqdm",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["llm"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
