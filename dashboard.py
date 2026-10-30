@@ -12,6 +12,7 @@ dependencies.
 """
 
 import argparse
+import importlib.util
 import json
 import math
 import shutil
@@ -27,13 +28,24 @@ ACTIVE_SECONDS = 600  # a run whose log changed this recently counts as running
 MAX_POINTS = 400  # per curve sent to the page
 
 
-def load_variants() -> dict:
-    try:
-        from ablate import VARIANTS
+_variants = (None, {})
 
-        return VARIANTS
+
+def load_variants() -> dict:
+    # Re-read ablate.py whenever it changes, so variants added while the
+    # dashboard is running show up without a restart
+    global _variants
+    path = ROOT / "ablate.py"
+    try:
+        mtime = path.stat().st_mtime
+        if mtime != _variants[0]:
+            spec = importlib.util.spec_from_file_location("ablate_variants", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            _variants = (mtime, module.VARIANTS)
     except Exception:
-        return {}
+        pass
+    return _variants[1]
 
 
 def read_log(path: Path):
