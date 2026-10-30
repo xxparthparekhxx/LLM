@@ -48,6 +48,9 @@ VARIANTS = {
     # Half the micro-batch (same tokens per step) to fit in 4 GB with everything on
     "deepseek-all": merge(DEEPSEEK_MUON, DOC_MASK_CLAMP, MHC, ENGRAM, MLA, MOE, MTP,
                           {"train": {"micro_batch_size": 4}}),
+    # The parts that beat the baseline at little speed cost; leaves out doc
+    # masking and MTP (each ~40% slower) and Engram (no gain at this size)
+    "deepseek-lite": merge(DEEPSEEK_MUON, MHC, MLA, MOE),
 }
 
 
