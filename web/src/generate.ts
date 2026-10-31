@@ -24,6 +24,12 @@ interface Cache {
   values: import('onnxruntime-web').Tensor;
 }
 
+function disposeCache(cache: Cache | null) {
+  if (!cache) return;
+  cache.keys.dispose?.();
+  cache.values.dispose?.();
+}
+
 function emptyCache(ort: OrtModule) {
   return new ort.Tensor('float32', new Float32Array(0), [MODEL.layers, 1, MODEL.kvHeads, 0, MODEL.headDim]);
 }
@@ -113,6 +119,7 @@ export async function generate(
 
     if (position >= MODEL.context) {
       // Context full: slide the window and re-prefill from the latest half.
+      disposeCache(cache);
       const tail = promptIds.concat(generated).slice(-(MODEL.context >> 1));
       ({ logits, cache } = await run(
         ort,
@@ -125,18 +132,22 @@ export async function generate(
       ));
       position = tail.length;
     } else {
+      const prev = cache;
       ({ logits, cache } = await run(
         ort,
         session,
         [next],
         [position],
-        cache,
+        prev,
         new Uint8Array(position + 1).fill(1),
         position + 1,
       ));
+      disposeCache(prev);
       position += 1;
     }
   }
+
+  disposeCache(cache);
 
   const seconds = (performance.now() - decodeStart) / 1000;
   return {

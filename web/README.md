@@ -103,8 +103,11 @@ The page tries, in order:
 3. **CPU (WASM)** through the bundled threads build. Threads require
    cross-origin isolation; without it, the runtime uses one thread.
 
-A failure falls through to the next option and the reason is shown under
-"Details". `?backend=wasm` or `?backend=webgpu` forces one path.
+When WebGPU is available, after loading, the page times a short warm-up
+plus 12 decode steps on both WebGPU and multi-threaded WASM, and picks whichever
+is faster on the visitor's hardware (cached in localStorage). A dropdown allows
+switching backends manually at any time. A failure falls through to the CPU
+fallback. `?backend=wasm` or `?backend=webgpu` forces one path directly.
 
 Measurements on an AMD Ryzen 9 8940HX / RTX 5060 Laptop, Chrome 156, generating
 100 tokens after the prompt, fp16 (one run; expect a few tokens/s of variance):

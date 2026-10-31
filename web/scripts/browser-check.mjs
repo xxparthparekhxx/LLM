@@ -1,10 +1,11 @@
-// Headless browser check of the built site: backend selection, 100 generated tokens,
-// tokens/s, and a screenshot. Runs against `vite preview` (run `npm run build:local` first).
+// Headless browser check of the built site: auto-selection, backend selection,
+// 100 generated tokens, tokens/s, and screenshots. Runs against `vite preview` (run `npm run build:local` first).
 //
-//   node scripts/browser-check.mjs            # CPU (WASM), then WebGPU
+//   node scripts/browser-check.mjs            # auto (timing both), then wasm, then webgpu
 //   node scripts/browser-check.mjs wasm       # CPU only
+//   node scripts/browser-check.mjs auto       # auto-selection only
 //
-// Chrome chooses the backend from ?backend=; the page reports what it actually started.
+// Chrome chooses the backend from ?backend= (or auto if omitted); the page reports what it actually started.
 
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -55,6 +56,7 @@ async function inPage(steps) {
   const e = demo.engine();
   const started = performance.now();
   const result = await demo.generate('Once upon a time', steps);
+  const statBench = document.getElementById('stat-benchmark');
   return {
     backend: e.backend,
     runtime: e.runtime,
@@ -63,6 +65,8 @@ async function inPage(steps) {
     note: e.note,
     chip: document.getElementById('chip-text').textContent,
     statBackend: document.getElementById('stat-backend').textContent,
+    benchmarkText: statBench ? statBench.textContent : null,
+    benchmark: e.benchmark ?? null,
     isolated: crossOriginIsolated,
     steps: result.generated,
     tokensPerSecond: result.tokensPerSecond,
@@ -74,22 +78,34 @@ async function inPage(steps) {
 
 mkdirSync(OUT, { recursive: true });
 const only = process.argv.slice(2);
-const wanted = only.length ? only : ['wasm', 'webgpu'];
+const wanted = only.length ? only : ['auto', 'wasm', 'webgpu'];
 const preview = await startPreview();
 const results = {};
 let failed = false;
 
 try {
   for (const backend of wanted) {
-    const chrome = await launchChrome(backend === 'webgpu' ? GPU_FLAGS : []);
+    const isGpu = backend === 'webgpu' || backend === 'auto';
+    const chrome = await launchChrome(isGpu ? GPU_FLAGS : []);
     try {
-      await chrome.goto(`${preview.url}/?backend=${backend}`);
+      const path = backend === 'auto' ? '' : `?backend=${backend}`;
+      await chrome.goto(`${preview.url}/${path}`);
       const r = await chrome.run(inPage, 100);
       results[backend] = { browser: await chrome.version(), ...r, console: chrome.consoleLines.slice(-6) };
       await chrome.screenshot(join(OUT, `ui-${backend}.png`));
       console.log(backend, JSON.stringify({ ...results[backend], text: undefined }));
+
+      if (backend === 'auto' && r.benchmark) {
+        console.log(
+          `[auto-selection] chose ${r.backend} (${r.backend === 'webgpu' ? r.benchmark.webgpuTokPerSec.toFixed(1) : r.benchmark.wasmTokPerSec.toFixed(1)} tok/s). ` +
+            `WebGPU: ${r.benchmark.webgpuTokPerSec.toFixed(1)} tok/s · CPU: ${r.benchmark.wasmTokPerSec.toFixed(1)} tok/s. ` +
+            `Timing step: ${r.benchmark.durationMs.toFixed(0)} ms (cached: ${Boolean(r.benchmark.cached)}).`,
+        );
+      }
+
       if (backend === 'webgpu' && r.backend !== 'webgpu') failed = true;
       if (backend === 'wasm' && r.backend !== 'wasm') failed = true;
+      if (backend === 'auto' && !['webgpu', 'wasm'].includes(r.backend)) failed = true;
     } catch (err) {
       failed = true;
       results[backend] = { error: String(err.message ?? err), console: chrome.consoleLines.slice(-10) };

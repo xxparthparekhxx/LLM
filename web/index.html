@@ -82,12 +82,20 @@
 
             <section class="panel" aria-labelledby="h-engine">
                 <h2 id="h-engine" class="panel-title">Engine</h2>
+                <div class="setting">
+                    <label class="field-label" for="backend-select">Switch backend</label>
+                    <select id="backend-select" class="backend-select">
+                        <option value="webgpu">WebGPU</option>
+                        <option value="wasm">CPU (WebAssembly)</option>
+                    </select>
+                </div>
                 <dl class="stats">
                     <dt>Backend</dt><dd id="stat-backend">-</dd>
                     <dt>Speed</dt><dd id="stat-speed">-</dd>
                     <dt>Generated</dt><dd id="stat-tokens">-</dd>
                     <dt>Prefill</dt><dd id="stat-prefill">-</dd>
                 </dl>
+                <div id="stat-benchmark" class="hint-text"></div>
                 <details id="engine-details" class="engine-details">
                     <summary>Details</summary>
                     <dl class="stats">

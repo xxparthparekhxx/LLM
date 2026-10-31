@@ -1,7 +1,13 @@
 import '@fontsource-variable/outfit/index.css';
 import './style.css';
 import { config, MODEL } from './config';
-import { createSession, type BackendName, type BackendPreference, type CreatedSession } from './backend';
+import {
+  createSession,
+  saveCachedBackendChoice,
+  type BackendName,
+  type BackendPreference,
+  type CreatedSession,
+} from './backend';
 import { clearModelCache, loadModel } from './modelLoader';
 import { generate } from './generate';
 
@@ -29,7 +35,9 @@ const statPrefill = $<HTMLElement>('stat-prefill');
 const statRuntime = $<HTMLElement>('stat-runtime');
 const statGpu = $<HTMLElement>('stat-gpu');
 const statThreads = $<HTMLElement>('stat-threads');
+const statBenchmark = $<HTMLDivElement>('stat-benchmark');
 const backendNote = $<HTMLDivElement>('backend-note');
+const backendSelect = $<HTMLSelectElement>('backend-select');
 const temperature = $<HTMLInputElement>('temperature');
 const temperatureValue = $<HTMLOutputElement>('temperature-value');
 const topK = $<HTMLInputElement>('top-k');
@@ -40,6 +48,7 @@ const topPValue = $<HTMLOutputElement>('top-p-value');
 let engine: CreatedSession | null = null;
 let controller: AbortController | null = null;
 let loading = false;
+let modelBytes: Uint8Array | null = null;
 
 const formatBytes = (bytes: number) => `${(bytes / 1e6).toFixed(1)} MB`;
 
@@ -56,6 +65,7 @@ function setBusy(busy: boolean) {
   generateButton.disabled = busy || !engine;
   stopButton.disabled = !busy;
   promptEl.disabled = busy;
+  backendSelect.disabled = busy || !engine;
 }
 
 function showError(message: string) {
@@ -71,6 +81,29 @@ function clearError() {
 function preferenceFromUrl(): BackendPreference {
   const value = new URLSearchParams(location.search).get('backend');
   return value === 'wasm' || value === 'webgpu' ? value : 'auto';
+}
+
+function applyEngineToUI(created: CreatedSession) {
+  setChip(created.backend, backendLabel(created));
+  statBackend.textContent = backendLabel(created);
+  statRuntime.textContent = created.runtime;
+  statGpu.textContent = created.gpu || '-';
+  statThreads.textContent = String(created.threads);
+  backendSelect.value = created.backend;
+
+  if (created.benchmark) {
+    const b = created.benchmark;
+    statBenchmark.hidden = false;
+    statBenchmark.textContent = `WebGPU ${Math.round(b.webgpuTokPerSec)} tok/s · CPU ${Math.round(b.wasmTokPerSec)} tok/s → using ${created.backend === 'webgpu' ? 'WebGPU' : 'CPU'}`;
+    const details = `Auto-selected ${created.backend === 'webgpu' ? 'WebGPU' : 'CPU'} (WebGPU ${b.webgpuTokPerSec.toFixed(1)} tok/s, CPU ${b.wasmTokPerSec.toFixed(1)} tok/s). Timing step took ${b.durationMs.toFixed(0)} ms${b.cached ? ' (cached)' : ''}.`;
+    backendNote.textContent = created.note ? `${details} ${created.note}` : details;
+  } else {
+    statBenchmark.hidden = true;
+    statBenchmark.textContent = '';
+    backendNote.textContent = created.note || (created.backend === 'webgpu' ? 'WebGPU is in use.' : 'CPU is in use.');
+  }
+
+  whyButton.hidden = created.backend === 'webgpu';
 }
 
 async function boot() {
@@ -95,6 +128,7 @@ async function boot() {
         : `${cached ? "From this browser's cache: " : 'Downloading model: '}${formatBytes(loaded)}`;
     });
 
+    modelBytes = bytes;
     loaderText.textContent = fromCache ? `Using the copy in this browser (${formatBytes(bytes.byteLength)})` : `${formatBytes(bytes.byteLength)} downloaded`;
     loaderTitle.textContent = 'Starting the runtime';
 
@@ -103,13 +137,7 @@ async function boot() {
     });
 
     loader.hidden = true;
-    setChip(engine.backend, backendLabel(engine));
-    statBackend.textContent = backendLabel(engine);
-    statRuntime.textContent = engine.runtime;
-    statGpu.textContent = engine.gpu || '-';
-    statThreads.textContent = String(engine.threads);
-    backendNote.textContent = engine.note || 'WebGPU is in use.' ;
-    whyButton.hidden = engine.backend === 'webgpu';
+    applyEngineToUI(engine);
     generateButton.disabled = false;
   } catch (err) {
     console.error(err);
@@ -205,6 +233,39 @@ whyButton.addEventListener('click', () => {
 });
 for (const input of [temperature, topK, topP]) input.addEventListener('input', updateControls);
 
+backendSelect.addEventListener('change', async () => {
+  const targetBackend = backendSelect.value as BackendName;
+  if (!engine || engine.backend === targetBackend || loading || !modelBytes) return;
+
+  setBusy(true);
+  backendSelect.disabled = true;
+  setChip('loading', `Switching to ${targetBackend === 'webgpu' ? 'WebGPU' : 'CPU'}...`);
+  clearError();
+
+  try {
+    const oldEngine = engine;
+    const prevBenchmark = oldEngine.benchmark;
+    await oldEngine.session.release();
+
+    engine = await createSession(modelBytes, targetBackend, config.ortExternalBase, (message) => {
+      setChip('loading', message);
+    });
+
+    const bench = prevBenchmark ? { ...prevBenchmark, choice: targetBackend } : null;
+    engine.benchmark = bench;
+    saveCachedBackendChoice(targetBackend, engine.gpu, bench);
+    applyEngineToUI(engine);
+  } catch (err) {
+    console.error('Failed to switch backend', err);
+    showError(`Failed to switch backend: ${(err as Error).message}`);
+    if (engine) {
+      applyEngineToUI(engine);
+    }
+  } finally {
+    setBusy(false);
+  }
+});
+
 temperature.value = '0.8';
 topK.value = '50';
 topP.value = '1';
@@ -216,6 +277,13 @@ void boot();
 Object.assign(window, {
   __demo: {
     engine: () => engine,
+    benchmark: () => engine?.benchmark ?? null,
+    switchBackend: async (backend: BackendName) => {
+      if (backendSelect.value !== backend) {
+        backendSelect.value = backend;
+        backendSelect.dispatchEvent(new Event('change'));
+      }
+    },
     generate: async (prompt: string, maxNewTokens = 20) => {
       if (!engine) throw new Error('model is not loaded yet');
       return generate(engine.ort, engine.session, prompt, {

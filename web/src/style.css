@@ -193,6 +193,7 @@ textarea {
 
 textarea:focus-visible,
 input[type='range']:focus-visible,
+select:focus-visible,
 .btn:focus-visible,
 .linklike:focus-visible,
 summary:focus-visible,
@@ -353,6 +354,23 @@ input[type='range'] {
     width: 100%;
     accent-color: var(--accent);
     cursor: pointer;
+}
+
+.backend-select {
+    width: 100%;
+    background: rgba(15, 23, 42, 0.8);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.backend-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .stats {
