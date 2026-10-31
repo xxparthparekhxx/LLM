@@ -61,6 +61,13 @@ resumes exactly (same step, same data order) when rerun with the same command.
 `--stop_after_hours 2.75` saves and exits early, for time-limited sessions such
 as Colab or Kaggle; running it again continues the same schedule.
 
+## Browser demo
+
+`export_onnx.py` exports a checkpoint with an explicit KV cache, and `web/` is a
+Vite + onnxruntime-web page that runs it on the visitor's device (WebGPU, then
+CPU). `measure_parity.py` checks the export against PyTorch and measures the
+quantized variants. See [`web/README.md`](web/README.md).
+
 ## Ablations
 
 `ablate.py` trains each variant (the base plus one DeepSeek component, and all

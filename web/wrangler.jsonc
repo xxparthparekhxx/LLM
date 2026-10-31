@@ -1,0 +1,16 @@
+// Cloudflare Workers, static assets only: no Worker script, no server-side code.
+// Deployed with `npx wrangler deploy` from web/ after `npm run build`. See "Deploying" in README.md.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tinystories-33m-browser",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    // `npm run build` writes the site here. Headers come from dist/_headers (copied from public/_headers).
+    "directory": "./dist"
+  },
+  // Serve the site at llm.parthparekhdev.com. The parthparekhdev.com zone must be on the same Cloudflare
+  // account; wrangler creates the DNS record and certificate for a custom domain.
+  "routes": [
+    { "pattern": "llm.parthparekhdev.com", "custom_domain": true }
+  ]
+}

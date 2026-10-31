@@ -1,0 +1,25 @@
+# Cloudflare Workers static assets / Pages headers file.
+# Cross-origin isolation lets onnxruntime-web use WebAssembly threads on the CPU path.
+# It needs both headers; everything this site loads is same-origin, except the model file
+# (Hugging Face, fetched with CORS) and, only on browsers without JSPI, the WebGPU runtime
+# (jsDelivr, also CORS). Both send Access-Control-Allow-Origin: *.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# Vite names these files with a content hash, so they can be cached for a year.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# onnxruntime-web runtime files; the version is part of the path.
+/ort/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The page itself must revalidate so a new deploy is picked up.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+model/*.onnx
+test/out/
+.env.local
+.env.*.local

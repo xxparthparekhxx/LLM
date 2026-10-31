@@ -1,0 +1,507 @@
+[
+ {
+  "text": "",
+  "tokens": [],
+  "decoded": ""
+ },
+ {
+  "text": "Once upon a time",
+  "tokens": [
+   7454,
+   2402,
+   257,
+   640
+  ],
+  "decoded": "Once upon a time"
+ },
+ {
+  "text": "Once upon a time,",
+  "tokens": [
+   7454,
+   2402,
+   257,
+   640,
+   11
+  ],
+  "decoded": "Once upon a time,"
+ },
+ {
+  "text": " there was a little girl",
+  "tokens": [
+   612,
+   373,
+   257,
+   1310,
+   2576
+  ],
+  "decoded": " there was a little girl"
+ },
+ {
+  "text": "there was a little girl ",
+  "tokens": [
+   8117,
+   373,
+   257,
+   1310,
+   2576,
+   220
+  ],
+  "decoded": "there was a little girl "
+ },
+ {
+  "text": "  two  spaces  ",
+  "tokens": [
+   220,
+   734,
+   220,
+   9029,
+   220,
+   220
+  ],
+  "decoded": "  two  spaces  "
+ },
+ {
+  "text": "\n\n",
+  "tokens": [
+   628
+  ],
+  "decoded": "\n\n"
+ },
+ {
+  "text": "\n\nOnce",
+  "tokens": [
+   198,
+   198,
+   7454
+  ],
+  "decoded": "\n\nOnce"
+ },
+ {
+  "text": "\tTabbed\t",
+  "tokens": [
+   197,
+   33349,
+   3077,
+   197
+  ],
+  "decoded": "\tTabbed\t"
+ },
+ {
+  "text": "It's a test: can't, won't, we'll, I'm, you've, he'd",
+  "tokens": [
+   1026,
+   338,
+   257,
+   1332,
+   25,
+   460,
+   470,
+   11,
+   1839,
+   470,
+   11,
+   356,
+   1183,
+   11,
+   314,
+   1101,
+   11,
+   345,
+   1053,
+   11,
+   339,
+   1549
+  ],
+  "decoded": "It's a test: can't, won't, we'll, I'm, you've, he'd"
+ },
+ {
+  "text": "Numbers: 0 1 42 1000 3.14 -7",
+  "tokens": [
+   49601,
+   25,
+   657,
+   352,
+   5433,
+   8576,
+   513,
+   13,
+   1415,
+   532,
+   22
+  ],
+  "decoded": "Numbers: 0 1 42 1000 3.14 -7"
+ },
+ {
+  "text": "Hello, world! (punctuation) ... --- ###",
+  "tokens": [
+   15496,
+   11,
+   995,
+   0,
+   357,
+   79,
+   16260,
+   2288,
+   8,
+   2644,
+   11420,
+   44386
+  ],
+  "decoded": "Hello, world! (punctuation) ... --- ###"
+ },
+ {
+  "text": "caf\u00e9, na\u00efve, r\u00e9sum\u00e9",
+  "tokens": [
+   66,
+   1878,
+   2634,
+   11,
+   41492,
+   11,
+   40560,
+   16345,
+   2634
+  ],
+  "decoded": "caf\u00e9, na\u00efve, r\u00e9sum\u00e9"
+ },
+ {
+  "text": "\u6771\u4eac is a city in Japan",
+  "tokens": [
+   30266,
+   109,
+   12859,
+   105,
+   318,
+   257,
+   1748,
+   287,
+   2869
+  ],
+  "decoded": "\u6771\u4eac is a city in Japan"
+ },
+ {
+  "text": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043c\u0438\u0440",
+  "tokens": [
+   140,
+   253,
+   21169,
+   18849,
+   38857,
+   16843,
+   20375,
+   11,
+   12466,
+   120,
+   18849,
+   21169
+  ],
+  "decoded": "\u041f\u0440\u0438\u0432\u0435\u0442, \u043c\u0438\u0440"
+ },
+ {
+  "text": "\u0645\u0631\u062d\u0628\u0627 \u0628\u0627\u0644\u0639\u0627\u0644\u0645",
+  "tokens": [
+   25405,
+   26897,
+   148,
+   255,
+   39848,
+   12919,
+   17550,
+   101,
+   23525,
+   44690,
+   23525,
+   25405
+  ],
+  "decoded": "\u0645\u0631\u062d\u0628\u0627 \u0628\u0627\u0644\u0639\u0627\u0644\u0645"
+ },
+ {
+  "text": "emoji: \ud83d\ude00 \ud83c\udf0d \ud83d\ude80\ud83d\udc69\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66",
+  "tokens": [
+   368,
+   31370,
+   25,
+   30325,
+   222,
+   12520,
+   234,
+   235,
+   12520,
+   248,
+   222,
+   41840,
+   102,
+   447,
+   235,
+   41840,
+   102,
+   447,
+   235,
+   41840,
+   100,
+   447,
+   235,
+   41840,
+   99
+  ],
+  "decoded": "emoji: \ud83d\ude00 \ud83c\udf0d \ud83d\ude80\ud83d\udc69\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66"
+ },
+ {
+  "text": "combining: e\u0301 a\u0308",
+  "tokens": [
+   24011,
+   3191,
+   25,
+   304,
+   136,
+   223,
+   257,
+   136,
+   230
+  ],
+  "decoded": "combining: e\u0301 a\u0308"
+ },
+ {
+  "text": "zero width: \u200b\u200b",
+  "tokens": [
+   22570,
+   9647,
+   25,
+   20126,
+   9525
+  ],
+  "decoded": "zero width: \u200b\u200b"
+ },
+ {
+  "text": "non-breaking\u00a0space",
+  "tokens": [
+   13159,
+   12,
+   13395,
+   1849,
+   13200
+  ],
+  "decoded": "non-breaking\u00a0space"
+ },
+ {
+  "text": "line\r\nwindows\r\n",
+  "tokens": [
+   1370,
+   201,
+   198,
+   28457,
+   201,
+   198
+  ],
+  "decoded": "line\r\nwindows\r\n"
+ },
+ {
+  "text": "quotes: \u201csmart\u201d \u2018quotes\u2019 \u2014 dash \u2013 en \u2026",
+  "tokens": [
+   421,
+   6421,
+   25,
+   564,
+   250,
+   27004,
+   447,
+   251,
+   564,
+   246,
+   421,
+   6421,
+   447,
+   247,
+   851,
+   14470,
+   784,
+   551,
+   3926
+  ],
+  "decoded": "quotes: \u201csmart\u201d \u2018quotes\u2019 \u2014 dash \u2013 en \u2026"
+ },
+ {
+  "text": "The little dog ran. The little dog jumped. The little dog slept.",
+  "tokens": [
+   464,
+   1310,
+   3290,
+   4966,
+   13,
+   383,
+   1310,
+   3290,
+   11687,
+   13,
+   383,
+   1310,
+   3290,
+   21256,
+   13
+  ],
+  "decoded": "The little dog ran. The little dog jumped. The little dog slept."
+ },
+ {
+  "text": "Once upon a time there was a tiny dragon who could not fly.",
+  "tokens": [
+   7454,
+   2402,
+   257,
+   640,
+   612,
+   373,
+   257,
+   7009,
+   10441,
+   508,
+   714,
+   407,
+   6129,
+   13
+  ],
+  "decoded": "Once upon a time there was a tiny dragon who could not fly."
+ },
+ {
+  "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tokens": [
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794,
+   24794
+  ],
+  "decoded": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "text": "    ",
+  "tokens": [
+   220,
+   220,
+   220,
+   220
+  ],
+  "decoded": "    "
+ },
+ {
+  "text": "word\nword",
+  "tokens": [
+   4775,
+   198,
+   4775
+  ],
+  "decoded": "word\nword"
+ },
+ {
+  "text": "\\backslash /slash",
+  "tokens": [
+   59,
+   1891,
+   6649,
+   1077,
+   1220,
+   6649,
+   1077
+  ],
+  "decoded": "\\backslash /slash"
+ },
+ {
+  "text": "\ud835\udd73\ud835\udd8a\ud835\udd91\ud835\udd91\ud835\udd94",
+  "tokens": [
+   47728,
+   243,
+   111,
+   47728,
+   244,
+   232,
+   47728,
+   244,
+   239,
+   47728,
+   244,
+   239,
+   47728,
+   244,
+   242
+  ],
+  "decoded": "\ud835\udd73\ud835\udd8a\ud835\udd91\ud835\udd91\ud835\udd94"
+ },
+ {
+  "text": "nul\u0000char",
+  "tokens": [
+   77,
+   377,
+   188,
+   10641
+  ],
+  "decoded": "nul\u0000char"
+ },
+ {
+  "text": "One day, Timmy found a shiny red ball. He played with it until dinner.",
+  "tokens": [
+   3198,
+   1110,
+   11,
+   5045,
+   1820,
+   1043,
+   257,
+   22441,
+   2266,
+   2613,
+   13,
+   679,
+   2826,
+   351,
+   340,
+   1566,
+   8073,
+   13
+  ],
+  "decoded": "One day, Timmy found a shiny red ball. He played with it until dinner."
+ }
+]

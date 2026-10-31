@@ -1,0 +1,33 @@
+{
+  "name": "tinystories-33m-browser",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A 33M-parameter TinyStories language model, trained from scratch, running in the browser with onnxruntime-web",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:local": "tsc --noEmit && vite build --mode localmodel",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:tokenizer": "vitest run test/tokenizer.test.ts",
+    "test:browser": "node scripts/browser-check.mjs",
+    "bench": "vitest run test/bench.test.ts --reporter=verbose",
+    "export:model": "../.venv/bin/python ../export_onnx.py",
+    "export:model:fp16": "../.venv/bin/python ../export_onnx.py --variant fp16 --out model/model_fp16.onnx",
+    "fixtures:tokenizer": "../.venv/bin/python scripts/make_tokenizer_fixtures.py"
+  },
+  "dependencies": {
+    "@fontsource-variable/outfit": "5.3.0",
+    "js-tiktoken": "1.0.21",
+    "onnxruntime-web": "1.31.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "onnxruntime-node": "1.31.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}

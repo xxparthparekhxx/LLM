@@ -2,8 +2,16 @@
 __pycache__/
 *.pyc
 data/
-runs/
+runs
 checkpoints/
 .cache
 .pytest_cache/
 logs/
+*.egg-info/
+
+# Browser demo
+*.onnx
+node_modules/
+web/dist/
+web/model/
+web/test/out/
